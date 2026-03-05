@@ -1,0 +1,83 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Better Fetch",
+  "projectDescription": "Advanced fetch wrapper for TypeScript with schema validation, plugins, hooks, and error handling as values",
+  "theme": "palm",
+  "primaryColor": "#dd540c",
+  "lightColor": "#6c2b0c",
+  "darkColor": null,
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": [
+          "introduction",
+          "installation",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "Core Concepts",
+        "pages": [
+          "core/basic-usage",
+          "core/error-handling",
+          "core/type-safety"
+        ]
+      },
+      {
+        "group": "Features",
+        "pages": [
+          "features/schema-validation",
+          "features/hooks",
+          "features/authorization",
+          "features/headers",
+          "features/timeout-retry",
+          "features/dynamic-parameters"
+        ]
+      },
+      {
+        "group": "Advanced",
+        "pages": [
+          "advanced/create-fetch",
+          "advanced/plugins",
+          "advanced/custom-plugins"
+        ]
+      },
+      {
+        "group": "API Reference",
+        "pages": [
+          "api/better-fetch",
+          "api/create-fetch",
+          "api/types",
+          "api/plugins",
+          "api/error"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Type-safe fetch wrapper with TypeScript support",
+    "Schema validation using Standard Schema (Zod, Valibot, ArkType)",
+    "Plugin system for extending functionality",
+    "Hook system for request/response lifecycle",
+    "Retry mechanism with configurable strategies",
+    "Error handling as values (non-throwing by default)",
+    "Authorization helpers and header management",
+    "Dynamic URL parameter substitution"
+  ],
+  "publicApiSurface": [
+    "betterFetch",
+    "createFetch",
+    "BetterFetchOption",
+    "BetterFetchResponse",
+    "BetterFetchPlugin",
+    "BetterFetchError",
+    "FetchHooks",
+    "RequestContext",
+    "ResponseContext",
+    "SuccessContext",
+    "ErrorContext",
+    "RetryOptions",
+    "Auth"
+  ]
+}
