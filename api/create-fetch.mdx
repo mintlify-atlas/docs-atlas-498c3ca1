@@ -1,0 +1,448 @@
+---
+title: "createFetch"
+description: "Create a pre-configured fetch instance with default options and schema validation"
+---
+
+## Overview
+
+The `createFetch` function creates a reusable fetch instance with pre-configured options, schema validation, and plugin support. This is ideal for API clients where you want to set up common configuration once and reuse it throughout your application.
+
+## Function Signature
+
+```typescript
+export const createFetch: <Option extends CreateFetchOption>(
+  config?: Option,
+) => BetterFetch<Option>
+```
+
+## Type Parameters
+
+<ParamField type="generic" name="Option" extends="CreateFetchOption">
+  Configuration options that extend `CreateFetchOption`. Type inference flows through to the returned fetch instance, providing full type safety.
+</ParamField>
+
+## Parameters
+
+<ParamField path="config" type="CreateFetchOption">
+  Configuration object for the fetch instance. All options from `BetterFetchOption` are supported, plus additional create-specific options.
+
+  <Expandable title="All Configuration Options">
+    ### Inherited from BetterFetchOption
+
+    <ParamField path="baseURL" type="string">
+      Base URL prepended to all requests.
+      
+      ```typescript
+      const api = createFetch({
+        baseURL: "https://api.example.com"
+      })
+      
+      await api("/users") // Requests https://api.example.com/users
+      ```
+    </ParamField>
+
+    <ParamField path="headers" type="CustomHeaders">
+      Default headers included in all requests. Can be overridden per request.
+      
+      ```typescript
+      const api = createFetch({
+        headers: {
+          "content-type": "application/json",
+          "x-api-version": "v1",
+        },
+      })
+      ```
+    </ParamField>
+
+    <ParamField path="timeout" type="number">
+      Default timeout in milliseconds for all requests.
+    </ParamField>
+
+    <ParamField path="throw" type="boolean" default="false">
+      If `true`, all requests throw `BetterFetchError` on failure instead of returning error in response.
+    </ParamField>
+
+    <ParamField path="auth" type="Auth">
+      Default authentication configuration for all requests.
+      
+      ```typescript
+      const api = createFetch({
+        auth: {
+          type: "Bearer",
+          token: () => getAccessToken(),
+        },
+      })
+      ```
+    </ParamField>
+
+    <ParamField path="retry" type="RetryOptions">
+      Default retry configuration for all requests.
+    </ParamField>
+
+    <ParamField path="plugins" type="BetterFetchPlugin[]">
+      Plugins applied to all requests made with this instance.
+    </ParamField>
+
+    <ParamField path="customFetchImpl" type="FetchEsque">
+      Custom fetch implementation to use.
+    </ParamField>
+
+    <ParamField path="jsonParser" type="(text: string) => Promise<any> | any">
+      Custom JSON parser for all requests.
+    </ParamField>
+
+    ### Lifecycle Hooks
+
+    <ParamField path="onRequest" type="(context: RequestContext) => Promise<RequestContext | void>">
+      Global `onRequest` hook applied to all requests.
+    </ParamField>
+
+    <ParamField path="onResponse" type="(context: ResponseContext) => Promise<Response | void>">
+      Global `onResponse` hook applied to all requests.
+    </ParamField>
+
+    <ParamField path="onSuccess" type="(context: SuccessContext) => Promise<void>">
+      Global `onSuccess` hook applied to all successful requests.
+    </ParamField>
+
+    <ParamField path="onError" type="(context: ErrorContext) => Promise<void>">
+      Global `onError` hook applied to all failed requests.
+    </ParamField>
+
+    <ParamField path="onRetry" type="(context: ResponseContext) => Promise<void>">
+      Global `onRetry` hook applied when retrying requests.
+    </ParamField>
+
+    ### CreateFetch-Specific Options
+
+    <ParamField path="schema" type="Schema">
+      API schema definition for type-safe routes and automatic validation.
+      
+      ```typescript
+      import { createSchema } from "better-fetch"
+      import { z } from "zod"
+      
+      const schema = createSchema({
+        "@get/users/:id": {
+          output: z.object({ id: z.string(), name: z.string() }),
+          params: z.object({ id: z.string() }),
+        },
+        "@post/users": {
+          input: z.object({ name: z.string(), email: z.string() }),
+          output: z.object({ id: z.string(), name: z.string() }),
+        },
+      }, {
+        baseURL: "https://api.example.com",
+        strict: true,
+      })
+      
+      const api = createFetch({ schema })
+      ```
+    </ParamField>
+
+    <ParamField path="catchAllError" type="boolean" default="false">
+      Catch all errors including non-API errors (like schema validation errors, network errors) and return them as error values instead of throwing.
+      
+      ```typescript
+      const api = createFetch({
+        catchAllError: true,
+      })
+      
+      const { data, error } = await api("/users")
+      // Even if schema validation fails, error is returned instead of thrown
+      ```
+    </ParamField>
+
+    <ParamField path="defaultOutput" type="StandardSchemaV1">
+      Default output schema applied to all requests unless overridden.
+    </ParamField>
+
+    <ParamField path="defaultError" type="StandardSchemaV1">
+      Default error schema for typing error responses.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Return Type
+
+<ResponseField name="BetterFetch" type="BetterFetch<Option>">
+  A function with the same signature as `betterFetch`, but with pre-configured defaults and full type inference from the schema (if provided).
+
+  ```typescript
+  type BetterFetch<CreateOptions> = <
+    Res,
+    Err,
+    U extends InferKey<Schema>,
+    // ... complex type inference
+  >(
+    url: U,
+    options?: InferOptions<Schema, U>
+  ) => Promise<BetterFetchResponse<Res, Err>>
+  ```
+
+  When a schema is provided, the URL parameter is type-checked against schema routes, and options are automatically typed based on the route definition.
+</ResponseField>
+
+## Examples
+
+### Basic Configuration
+
+```typescript
+import { createFetch } from "better-fetch"
+
+const api = createFetch({
+  baseURL: "https://api.example.com",
+  headers: {
+    "content-type": "application/json",
+  },
+  timeout: 10000,
+})
+
+// Use the configured instance
+const { data, error } = await api("/users")
+// Requests: https://api.example.com/users
+```
+
+### With Authentication
+
+```typescript
+const api = createFetch({
+  baseURL: "https://api.example.com",
+  auth: {
+    type: "Bearer",
+    token: async () => {
+      // Dynamically fetch token
+      return await getAccessToken()
+    },
+  },
+})
+
+const { data, error } = await api("/protected")
+// Automatically includes: Authorization: Bearer <token>
+```
+
+### With Schema Validation
+
+```typescript
+import { createFetch, createSchema } from "better-fetch"
+import { z } from "zod"
+
+const userSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string().email(),
+})
+
+const schema = createSchema({
+  "@get/users": {
+    output: z.array(userSchema),
+  },
+  "@get/users/:id": {
+    output: userSchema,
+    params: z.object({ id: z.string() }),
+  },
+  "@post/users": {
+    input: z.object({
+      name: z.string().min(1),
+      email: z.string().email(),
+    }),
+    output: userSchema,
+  },
+  "@put/users/:id": {
+    input: z.object({
+      name: z.string().min(1).optional(),
+      email: z.string().email().optional(),
+    }),
+    params: z.object({ id: z.string() }),
+    output: userSchema,
+  },
+  "@delete/users/:id": {
+    params: z.object({ id: z.string() }),
+    output: z.object({ success: z.boolean() }),
+  },
+}, {
+  baseURL: "https://api.example.com",
+  strict: true, // Only allow URLs defined in schema
+})
+
+const api = createFetch({ schema })
+
+// Type-safe requests
+const { data: users } = await api("@get/users")
+// users: Array<{ id: string; name: string; email: string }>
+
+const { data: user } = await api("@get/users/:id", {
+  params: { id: "123" }, // Required and type-checked
+})
+// user: { id: string; name: string; email: string }
+
+const { data: newUser } = await api("@post/users", {
+  body: { // Required and validated
+    name: "John Doe",
+    email: "john@example.com",
+  },
+})
+```
+
+### With Global Error Handling
+
+```typescript
+const api = createFetch({
+  baseURL: "https://api.example.com",
+  onError: async (context) => {
+    console.error(`Request to ${context.request.url} failed:`, context.error)
+    
+    // Log to error tracking service
+    if (context.error.status >= 500) {
+      logToSentry(context.error)
+    }
+  },
+  onSuccess: async (context) => {
+    console.log(`Request to ${context.request.url} succeeded`)
+  },
+})
+```
+
+### With Automatic Retries
+
+```typescript
+const api = createFetch({
+  baseURL: "https://api.example.com",
+  retry: {
+    type: "exponential",
+    attempts: 3,
+    baseDelay: 1000,
+    maxDelay: 10000,
+    shouldRetry: (response) => {
+      // Retry on rate limit or server errors
+      return response?.status === 429 || (response?.status ?? 0) >= 500
+    },
+  },
+})
+```
+
+### With Plugins
+
+```typescript
+import { createFetch } from "better-fetch"
+import { myCustomPlugin } from "./plugins"
+
+const api = createFetch({
+  baseURL: "https://api.example.com",
+  plugins: [myCustomPlugin],
+})
+```
+
+### Catch All Errors
+
+```typescript
+const api = createFetch({
+  baseURL: "https://api.example.com",
+  catchAllError: true, // Never throws, always returns error as value
+})
+
+const { data, error } = await api("/invalid-json")
+if (error) {
+  // Handles both API errors and parsing errors
+  console.error(error)
+}
+```
+
+### Multiple API Clients
+
+```typescript
+// Internal API
+const internalAPI = createFetch({
+  baseURL: "https://internal.example.com",
+  headers: {
+    "x-api-key": process.env.INTERNAL_API_KEY,
+  },
+})
+
+// External API
+const externalAPI = createFetch({
+  baseURL: "https://api.external.com",
+  auth: {
+    type: "Bearer",
+    token: process.env.EXTERNAL_API_TOKEN,
+  },
+  timeout: 5000,
+})
+
+// Use different clients for different purposes
+const internalData = await internalAPI("/users")
+const externalData = await externalAPI("/data")
+```
+
+### Override Default Options
+
+```typescript
+const api = createFetch({
+  baseURL: "https://api.example.com",
+  headers: {
+    "content-type": "application/json",
+  },
+  timeout: 10000,
+})
+
+// Override for specific request
+const { data, error } = await api("/upload", {
+  headers: {
+    "content-type": "multipart/form-data", // Overrides default
+  },
+  timeout: 60000, // Longer timeout for upload
+  body: formData,
+})
+```
+
+## Schema System
+
+The schema system provides compile-time type safety and runtime validation for your API routes.
+
+### Schema Route Format
+
+Routes in the schema use the format `@{method}/{path}`:
+
+- `@get/users` - GET request to `/users`
+- `@post/users` - POST request to `/users`
+- `@get/users/:id` - GET request with path parameter
+- `@put/users/:id/posts/:postId` - Multiple path parameters
+
+### Schema Config
+
+<ParamField path="baseURL" type="string">
+  Base URL for the schema routes. Used to convert schema keys to actual URLs.
+</ParamField>
+
+<ParamField path="prefix" type="string">
+  Prefix for schema routes. Allows using shorter keys in code.
+  
+  ```typescript
+  const schema = createSchema(
+    { "@get/users": { ... } },
+    { prefix: "/api" }
+  )
+  
+  // Call with prefix
+  await api("/api@get/users")
+  ```
+</ParamField>
+
+<ParamField path="strict" type="boolean" default="false">
+  When `true`, only allows URLs that are defined in the schema. Provides compile-time errors for invalid routes.
+</ParamField>
+
+<Note>
+  When using schemas, input validation happens before the request is sent, and output validation happens after receiving the response. This ensures data integrity at both boundaries.
+</Note>
+
+<Warning>
+  Headers configured in `createFetch` are merged with per-request headers. Per-request headers take precedence in case of conflicts.
+</Warning>
+
+## See Also
+
+- [betterFetch](/api/better-fetch) - Core fetch function
+- [Schema Types](/api/types#schema) - Schema type definitions
+- [Plugins](/api/plugins) - Plugin system
+- [Error Handling](/api/error) - Error handling

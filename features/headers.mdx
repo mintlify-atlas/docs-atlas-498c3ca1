@@ -1,0 +1,377 @@
+---
+title: Headers
+description: Set and manage HTTP headers with type safety
+---
+
+Better Fetch provides a flexible and type-safe way to set HTTP headers for your requests.
+
+## Setting Headers
+
+Headers can be set using the `headers` option:
+
+```typescript
+import { betterFetch } from "@better-fetch/fetch";
+
+const { data } = await betterFetch("/api/data", {
+  headers: {
+    "Content-Type": "application/json",
+    "X-Custom-Header": "value",
+  },
+});
+```
+
+## Header Formats
+
+Better Fetch accepts headers in multiple formats:
+
+### Object Format
+
+```typescript
+await betterFetch("/api/data", {
+  headers: {
+    "x-api-key": "secret-key",
+    "x-client-version": "1.0.0",
+  },
+});
+```
+
+### Headers Object
+
+```typescript
+const headers = new Headers();
+headers.set("x-api-key", "secret-key");
+headers.set("x-client-version", "1.0.0");
+
+await betterFetch("/api/data", {
+  headers: headers,
+});
+```
+
+### Array Format
+
+```typescript
+await betterFetch("/api/data", {
+  headers: [
+    ["x-api-key", "secret-key"],
+    ["x-client-version", "1.0.0"],
+  ],
+});
+```
+
+## CustomHeaders Type
+
+Better Fetch provides a `CustomHeaders` type with autocomplete for common headers:
+
+```typescript
+import type { CustomHeaders } from "@better-fetch/fetch";
+
+const headers: CustomHeaders = {
+  accept: "application/json",              // Autocomplete available
+  "content-type": "application/json",      // Autocomplete available
+  authorization: "Bearer token",           // Autocomplete available
+  "x-custom-header": "value",             // Any string also works
+};
+
+await betterFetch("/api/data", { headers });
+```
+
+### Common Header Types
+
+The `CustomHeaders` type provides autocomplete for:
+
+**Accept**:
+- `application/json`
+- `text/plain`
+- `application/octet-stream`
+
+**Content-Type**:
+- `application/json`
+- `text/plain`
+- `application/x-www-form-urlencoded`
+- `multipart/form-data`
+- `application/octet-stream`
+
+**Authorization**:
+- `Bearer ${string}`
+- `Basic ${string}`
+
+<Tip>
+  Use the `CustomHeaders` type for TypeScript autocomplete on common header values.
+</Tip>
+
+## Content-Type Handling
+
+Better Fetch automatically handles Content-Type based on your body:
+
+### JSON Bodies
+
+```typescript
+// Automatically sets Content-Type: application/json
+await betterFetch("/api/user", {
+  method: "POST",
+  body: {
+    name: "John",
+    email: "john@example.com",
+  },
+});
+```
+
+### Plain Text
+
+```typescript
+// Explicitly set Content-Type for text
+await betterFetch("/api/data", {
+  method: "POST",
+  body: "plain text content",
+  headers: {
+    "Content-Type": "text/plain",
+  },
+});
+```
+
+### Form Data
+
+```typescript
+const formData = new FormData();
+formData.append("file", fileInput.files[0]);
+formData.append("name", "document.pdf");
+
+// Content-Type is set automatically with boundary
+await betterFetch("/api/upload", {
+  method: "POST",
+  body: formData,
+});
+```
+
+### URL Encoded
+
+```typescript
+const params = new URLSearchParams();
+params.append("username", "john");
+params.append("password", "secret");
+
+await betterFetch("/api/login", {
+  method: "POST",
+  body: params,
+  headers: {
+    "Content-Type": "application/x-www-form-urlencoded",
+  },
+});
+```
+
+<Note>
+  Better Fetch preserves your explicit Content-Type header if provided, otherwise it infers it from the body type.
+</Note>
+
+## Header Merging Behavior
+
+When using `createFetch`, headers are merged between the instance and individual requests:
+
+```typescript
+import { createFetch } from "@better-fetch/fetch";
+
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  headers: {
+    "X-API-Version": "v2",
+    "X-Client-ID": "web-app",
+  },
+});
+
+// Request includes both instance and request headers
+const { data } = await $fetch("/user", {
+  headers: {
+    "X-Request-ID": "abc-123",
+  },
+});
+
+// Headers sent:
+// X-API-Version: v2
+// X-Client-ID: web-app
+// X-Request-ID: abc-123
+```
+
+### Overriding Instance Headers
+
+```typescript
+const $fetch = createFetch({
+  headers: {
+    "X-Client-Version": "1.0.0",
+  },
+});
+
+// Override the instance header
+await $fetch("/user", {
+  headers: {
+    "X-Client-Version": "2.0.0",  // Overrides instance value
+  },
+});
+```
+
+## Common Header Patterns
+
+### API Key Authentication
+
+```typescript
+await betterFetch("/api/data", {
+  headers: {
+    "X-API-Key": "your-api-key",
+  },
+});
+```
+
+### Custom User Agent
+
+```typescript
+await betterFetch("/api/data", {
+  headers: {
+    "User-Agent": "MyApp/1.0.0",
+  },
+});
+```
+
+### CORS Headers
+
+```typescript
+await betterFetch("/api/data", {
+  headers: {
+    "Origin": "https://example.com",
+    "Access-Control-Request-Method": "POST",
+    "Access-Control-Request-Headers": "Content-Type",
+  },
+});
+```
+
+### Accept Language
+
+```typescript
+await betterFetch("/api/content", {
+  headers: {
+    "Accept-Language": "en-US,en;q=0.9",
+  },
+});
+```
+
+### Cache Control
+
+```typescript
+await betterFetch("/api/data", {
+  headers: {
+    "Cache-Control": "no-cache",
+  },
+});
+```
+
+## Dynamic Headers
+
+Use hooks to dynamically set headers:
+
+```typescript
+await betterFetch("/api/data", {
+  onRequest: (context) => {
+    // Add dynamic headers
+    context.headers.set("X-Timestamp", Date.now().toString());
+    context.headers.set("X-Request-ID", crypto.randomUUID());
+    return context;
+  },
+});
+```
+
+## Conditional Headers
+
+```typescript
+const isDevelopment = process.env.NODE_ENV === "development";
+
+await betterFetch("/api/data", {
+  headers: {
+    "X-Environment": isDevelopment ? "dev" : "prod",
+    ...(isDevelopment && { "X-Debug": "true" }),
+  },
+});
+```
+
+## Using with Authorization
+
+Combine custom headers with the auth option:
+
+```typescript
+await betterFetch("/api/protected", {
+  auth: {
+    type: "Bearer",
+    token: "access-token",
+  },
+  headers: {
+    "X-API-Version": "v2",
+    "X-Client-Platform": "web",
+  },
+});
+
+// Results in:
+// Authorization: Bearer access-token
+// X-API-Version: v2
+// X-Client-Platform: web
+```
+
+<Warning>
+  If you manually set an `Authorization` header and also use the `auth` option, the `auth` option will take precedence.
+</Warning>
+
+## Type-Safe Custom Headers
+
+Extend the `CustomHeaders` type for your API:
+
+```typescript
+import type { CustomHeaders } from "@better-fetch/fetch";
+
+type MyAPIHeaders = CustomHeaders<{
+  "X-Tenant-ID": string;
+  "X-User-Role": "admin" | "user" | "guest";
+}>;
+
+const headers: MyAPIHeaders = {
+  "X-Tenant-ID": "tenant-123",
+  "X-User-Role": "admin",  // Autocomplete for role values
+};
+
+await betterFetch("/api/data", { headers });
+```
+
+## Reading Response Headers
+
+Access response headers through hooks:
+
+```typescript
+await betterFetch("/api/data", {
+  onResponse: (context) => {
+    const rateLimit = context.response.headers.get("X-RateLimit-Remaining");
+    const resetTime = context.response.headers.get("X-RateLimit-Reset");
+    
+    console.log(`Rate limit: ${rateLimit} requests remaining`);
+    console.log(`Resets at: ${new Date(Number(resetTime) * 1000)}`);
+    
+    return context;
+  },
+});
+```
+
+## Best Practices
+
+<Steps>
+
+### Use type-safe headers
+
+Leverage the `CustomHeaders` type for autocomplete and type checking.
+
+### Set headers at the right level
+
+Use instance-level headers for common values, request-level for specific needs.
+
+### Avoid sensitive data in headers
+
+Use the `auth` option for authentication instead of manually setting Authorization headers.
+
+### Use lowercase header names
+
+While HTTP headers are case-insensitive, lowercase names are conventional.
+
+</Steps>

@@ -1,0 +1,86 @@
+---
+title: "Introduction"
+description: "Advanced fetch wrapper for TypeScript with schema validation, plugins, hooks, and error handling as values"
+---
+
+# Better Fetch
+
+Better Fetch is a modern, type-safe fetch wrapper for TypeScript that works seamlessly across browsers, Node.js (v18+), workers, Deno, and Bun. It enhances the native Fetch API with powerful features like schema validation, plugins, hooks, and built-in error handling.
+
+## Why Better Fetch?
+
+<CardGroup cols={2}>
+  <Card title="Type Safety" icon="shield-check">
+    Full TypeScript support with automatic type inference from schemas
+  </Card>
+  <Card title="Schema Validation" icon="check-circle">
+    Validate requests and responses using Zod, Valibot, ArkType, or any Standard Schema validator
+  </Card>
+  <Card title="Error Handling" icon="circle-exclamation">
+    Errors as values by default - no try/catch required
+  </Card>
+  <Card title="Extensible" icon="plug">
+    Plugin system and lifecycle hooks for complete customization
+  </Card>
+  <Card title="Smart Retry" icon="rotate">
+    Built-in retry logic with configurable strategies
+  </Card>
+  <Card title="Universal" icon="globe">
+    Works everywhere - browser, Node.js, Deno, Bun, and edge runtimes
+  </Card>
+</CardGroup>
+
+## Key Features
+
+Better Fetch provides everything you need for modern HTTP requests:
+
+- **Type-safe fetch wrapper** with full TypeScript support
+- **Schema validation** using Standard Schema (Zod, Valibot, ArkType)
+- **Plugin system** for extending functionality
+- **Hook system** for request/response lifecycle (onRequest, onResponse, onSuccess, onError, onRetry)
+- **Retry mechanism** with configurable strategies
+- **Error handling as values** (non-throwing by default)
+- **Authorization helpers** and header management
+- **Dynamic URL parameter** substitution
+- **Timeout support** with automatic cancellation
+- **Custom fetch implementations** for testing and mocking
+
+## Quick Example
+
+```typescript
+import { betterFetch } from "@better-fetch/fetch";
+import { z } from "zod";
+
+const { data, error } = await betterFetch("https://api.example.com/users/1", {
+  output: z.object({
+    id: z.number(),
+    name: z.string(),
+    email: z.string().email(),
+  }),
+});
+
+if (error) {
+  console.error("Request failed:", error.status, error.statusText);
+  return;
+}
+
+// data is fully typed based on the schema
+console.log(data.name); // TypeScript knows this is a string
+```
+
+## Get Started
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Better Fetch in your project
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Make your first request in minutes
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/core/basic-usage">
+    Learn the fundamentals
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/better-fetch">
+    Explore the complete API
+  </Card>
+</CardGroup>

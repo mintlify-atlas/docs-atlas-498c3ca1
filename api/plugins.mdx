@@ -1,0 +1,611 @@
+---
+title: "Plugins"
+description: "Plugin system for extending Better Fetch functionality"
+---
+
+## Overview
+
+The plugin system allows you to extend Better Fetch with custom functionality through lifecycle hooks and request/response transformations. Plugins can add authentication, logging, caching, rate limiting, and more.
+
+## BetterFetchPlugin
+
+The main plugin type.
+
+```typescript
+type BetterFetchPlugin<
+  ExtraOptions extends Record<string, any> = Record<string, any>,
+> = {
+  id: string
+  name: string
+  description?: string
+  version?: string
+  hooks?: FetchHooks
+  init?: (
+    url: string,
+    options?: BetterFetchOption & ExtraOptions,
+  ) => Promise<{
+    url: string
+    options?: BetterFetchOption
+  }> | {
+    url: string
+    options?: BetterFetchOption
+  }
+  schema?: Schema
+  getOptions?: () => StandardSchemaV1
+}
+```
+
+### Properties
+
+<ParamField path="id" type="string" required>
+  Unique identifier for the plugin.
+  
+  ```typescript
+  {
+    id: "my-plugin",
+    name: "My Plugin",
+  }
+  ```
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Human-readable name for the plugin.
+</ParamField>
+
+<ParamField path="description" type="string">
+  Description of what the plugin does.
+</ParamField>
+
+<ParamField path="version" type="string">
+  Plugin version following semantic versioning.
+</ParamField>
+
+<ParamField path="hooks" type="FetchHooks">
+  Lifecycle hooks for the plugin. See [FetchHooks](#fetchhooks).
+</ParamField>
+
+<ParamField path="init" type="function">
+  Initialization function called before the request. Can modify the URL and options.
+  
+  **Signature:**
+  ```typescript
+  init?: (
+    url: string,
+    options?: BetterFetchOption & ExtraOptions,
+  ) => Promise<{ url: string; options?: BetterFetchOption }> 
+    | { url: string; options?: BetterFetchOption }
+  ```
+  
+  **Parameters:**
+  - `url`: The request URL
+  - `options`: The request options including any plugin-specific options
+  
+  **Returns:**
+  An object with potentially modified `url` and `options`.
+</ParamField>
+
+<ParamField path="schema" type="Schema">
+  Optional schema for the plugin. Useful for plugins that provide API clients.
+</ParamField>
+
+<ParamField path="getOptions" type="() => StandardSchemaV1">
+  **Deprecated.** Use TypeScript type inference instead.
+</ParamField>
+
+### Type Parameters
+
+<ParamField type="generic" name="ExtraOptions" default="Record<string, any>">
+  Additional options the plugin adds to `BetterFetchOption`.
+  
+  ```typescript
+  type MyPluginOptions = {
+    myCustomOption: string
+  }
+  
+  const myPlugin: BetterFetchPlugin<MyPluginOptions> = {
+    id: "my-plugin",
+    name: "My Plugin",
+    init: async (url, options) => {
+      console.log(options?.myCustomOption)
+      return { url, options }
+    },
+  }
+  ```
+</ParamField>
+
+## FetchHooks
+
+Lifecycle hooks interface.
+
+```typescript
+interface FetchHooks<Res = any> {
+  onRequest?: <T extends Record<string, any>>(
+    context: RequestContext<T>,
+  ) => Promise<RequestContext | void> | RequestContext | void
+  
+  onResponse?: (
+    context: ResponseContext,
+  ) => Promise<Response | void | ResponseContext> 
+    | Response 
+    | ResponseContext 
+    | void
+  
+  onSuccess?: (
+    context: SuccessContext<Res>
+  ) => Promise<void> | void
+  
+  onError?: (
+    context: ErrorContext
+  ) => Promise<void> | void
+  
+  onRetry?: (
+    response: ResponseContext
+  ) => Promise<void> | void
+  
+  hookOptions?: {
+    cloneResponse?: boolean
+  }
+}
+```
+
+### Hook Methods
+
+<ParamField path="onRequest" type="function">
+  Called before the request is sent. Can modify the request context.
+  
+  **Signature:**
+  ```typescript
+  onRequest?: (
+    context: RequestContext
+  ) => Promise<RequestContext | void> | RequestContext | void
+  ```
+  
+  **Returns:**
+  - Return a `RequestContext` to modify the request
+  - Return `void` to proceed without modifications
+  
+  **Example:**
+  ```typescript
+  onRequest: async (context) => {
+    // Add authentication header
+    context.headers.set("authorization", `Bearer ${token}`)
+    return context
+  }
+  ```
+</ParamField>
+
+<ParamField path="onResponse" type="function">
+  Called when response is received, before parsing.
+  
+  **Signature:**
+  ```typescript
+  onResponse?: (
+    context: ResponseContext
+  ) => Promise<Response | void | ResponseContext> 
+    | Response 
+    | ResponseContext 
+    | void
+  ```
+  
+  **Returns:**
+  - Return a `Response` to replace the original response
+  - Return a `ResponseContext` to modify both response and request
+  - Return `void` to proceed without modifications
+  
+  **Example:**
+  ```typescript
+  onResponse: async (context) => {
+    // Log response
+    console.log("Response status:", context.response.status)
+  }
+  ```
+</ParamField>
+
+<ParamField path="onSuccess" type="function">
+  Called when request succeeds (2xx status).
+  
+  **Signature:**
+  ```typescript
+  onSuccess?: (
+    context: SuccessContext<Res>
+  ) => Promise<void> | void
+  ```
+  
+  **Example:**
+  ```typescript
+  onSuccess: async (context) => {
+    console.log("Request succeeded:", context.data)
+  }
+  ```
+</ParamField>
+
+<ParamField path="onError" type="function">
+  Called when request fails (non-2xx status).
+  
+  **Signature:**
+  ```typescript
+  onError?: (
+    context: ErrorContext
+  ) => Promise<void> | void
+  ```
+  
+  **Example:**
+  ```typescript
+  onError: async (context) => {
+    console.error("Request failed:", context.error)
+    // Send to error tracking
+    if (context.error.status >= 500) {
+      logToSentry(context.error)
+    }
+  }
+  ```
+</ParamField>
+
+<ParamField path="onRetry" type="function">
+  Called before a retry attempt.
+  
+  **Signature:**
+  ```typescript
+  onRetry?: (
+    response: ResponseContext
+  ) => Promise<void> | void
+  ```
+  
+  **Example:**
+  ```typescript
+  onRetry: async (context) => {
+    console.log("Retrying request...")
+  }
+  ```
+</ParamField>
+
+<ParamField path="hookOptions" type="object">
+  Options for hook behavior.
+  
+  <ParamField path="cloneResponse" type="boolean" default="false">
+    Clone the response object before passing to hooks. Required if you need to read the response body in hooks.
+  </ParamField>
+</ParamField>
+
+## Context Types
+
+### RequestContext
+
+Context passed to `onRequest` hook.
+
+```typescript
+type RequestContext<T extends Record<string, any> = any> = {
+  url: URL | string
+  headers: Headers
+  body: any
+  method: string
+  signal: AbortSignal
+} & BetterFetchOption<any, any, any, T>
+```
+
+<ResponseField name="url" type="URL | string">
+  The request URL.
+</ResponseField>
+
+<ResponseField name="headers" type="Headers">
+  Request headers. Can be modified.
+</ResponseField>
+
+<ResponseField name="body" type="any">
+  Request body.
+</ResponseField>
+
+<ResponseField name="method" type="string">
+  HTTP method.
+</ResponseField>
+
+<ResponseField name="signal" type="AbortSignal">
+  Abort signal for cancelling the request.
+</ResponseField>
+
+### ResponseContext
+
+Context passed to `onResponse` and `onRetry` hooks.
+
+```typescript
+type ResponseContext = {
+  response: Response
+  request: RequestContext
+}
+```
+
+<ResponseField name="response" type="Response">
+  The Response object.
+</ResponseField>
+
+<ResponseField name="request" type="RequestContext">
+  The original request context.
+</ResponseField>
+
+### SuccessContext
+
+Context passed to `onSuccess` hook.
+
+```typescript
+type SuccessContext<Res = any> = {
+  data: Res
+  response: Response
+  request: RequestContext
+}
+```
+
+<ResponseField name="data" type="Res">
+  The parsed response data.
+</ResponseField>
+
+<ResponseField name="response" type="Response">
+  The Response object.
+</ResponseField>
+
+<ResponseField name="request" type="RequestContext">
+  The original request context.
+</ResponseField>
+
+### ErrorContext
+
+Context passed to `onError` hook.
+
+```typescript
+type ErrorContext = {
+  response: Response
+  request: RequestContext
+  error: BetterFetchError & Record<string, any>
+}
+```
+
+<ResponseField name="response" type="Response">
+  The Response object.
+</ResponseField>
+
+<ResponseField name="request" type="RequestContext">
+  The original request context.
+</ResponseField>
+
+<ResponseField name="error" type="BetterFetchError & Record<string, any>">
+  The error object with status information.
+</ResponseField>
+
+## initializePlugins
+
+Internal function for initializing plugins.
+
+```typescript
+export const initializePlugins: (
+  url: string,
+  options?: BetterFetchOption,
+) => Promise<{
+  url: string
+  options: BetterFetchOption
+  hooks: {
+    onRequest: Array<FetchHooks["onRequest"]>
+    onResponse: Array<FetchHooks["onResponse"]>
+    onSuccess: Array<FetchHooks["onSuccess"]>
+    onError: Array<FetchHooks["onError"]>
+    onRetry: Array<FetchHooks["onRetry"]>
+  }
+}>
+```
+
+This function is used internally by Better Fetch to initialize plugins and collect their hooks. You typically don't need to call this directly.
+
+## Plugin Examples
+
+### Logging Plugin
+
+```typescript
+import type { BetterFetchPlugin } from "better-fetch"
+
+const loggingPlugin: BetterFetchPlugin = {
+  id: "logging-plugin",
+  name: "Logging Plugin",
+  description: "Logs all requests and responses",
+  version: "1.0.0",
+  hooks: {
+    onRequest: async (context) => {
+      console.log(`[Request] ${context.method} ${context.url}`)
+    },
+    onResponse: async (context) => {
+      console.log(
+        `[Response] ${context.response.status} ${context.request.url}`
+      )
+    },
+    onError: async (context) => {
+      console.error(
+        `[Error] ${context.error.status} ${context.request.url}`,
+        context.error
+      )
+    },
+  },
+}
+```
+
+### Rate Limiting Plugin
+
+```typescript
+const rateLimitPlugin: BetterFetchPlugin = {
+  id: "rate-limit-plugin",
+  name: "Rate Limit Plugin",
+  description: "Handles rate limiting with automatic backoff",
+  version: "1.0.0",
+  hooks: {
+    onError: async (context) => {
+      if (context.error.status === 429) {
+        const retryAfter = context.response.headers.get("retry-after")
+        if (retryAfter) {
+          console.log(`Rate limited. Retry after ${retryAfter}s`)
+        }
+      }
+    },
+  },
+}
+```
+
+### Cache Plugin
+
+```typescript
+const cache = new Map<string, any>()
+
+const cachePlugin: BetterFetchPlugin = {
+  id: "cache-plugin",
+  name: "Cache Plugin",
+  description: "Caches GET request responses",
+  version: "1.0.0",
+  init: async (url, options) => {
+    // Check cache for GET requests
+    if (options?.method === "GET" || !options?.method) {
+      const cached = cache.get(url)
+      if (cached) {
+        console.log("Cache hit for:", url)
+        // Return cached response
+      }
+    }
+    return { url, options }
+  },
+  hooks: {
+    onSuccess: async (context) => {
+      // Cache successful GET responses
+      if (context.request.method === "GET") {
+        cache.set(context.request.url.toString(), context.data)
+      }
+    },
+  },
+}
+```
+
+### Authentication Refresh Plugin
+
+```typescript
+type AuthPluginOptions = {
+  getAccessToken: () => Promise<string>
+  refreshToken: () => Promise<string>
+}
+
+const authRefreshPlugin: BetterFetchPlugin<AuthPluginOptions> = {
+  id: "auth-refresh-plugin",
+  name: "Auth Refresh Plugin",
+  description: "Automatically refreshes tokens on 401",
+  version: "1.0.0",
+  hooks: {
+    onRequest: async (context) => {
+      const token = await context.getAccessToken?.()
+      if (token) {
+        context.headers.set("authorization", `Bearer ${token}`)
+      }
+      return context
+    },
+    onError: async (context) => {
+      if (context.error.status === 401) {
+        console.log("Token expired, refreshing...")
+        await context.request.refreshToken?.()
+      }
+    },
+  },
+}
+```
+
+### Request ID Plugin
+
+```typescript
+const requestIdPlugin: BetterFetchPlugin = {
+  id: "request-id-plugin",
+  name: "Request ID Plugin",
+  description: "Adds unique request ID to each request",
+  version: "1.0.0",
+  hooks: {
+    onRequest: async (context) => {
+      const requestId = crypto.randomUUID()
+      context.headers.set("x-request-id", requestId)
+      console.log(`Request ID: ${requestId}`)
+      return context
+    },
+  },
+}
+```
+
+### Error Tracking Plugin
+
+```typescript
+type ErrorTrackingOptions = {
+  trackError?: (error: any) => void
+}
+
+const errorTrackingPlugin: BetterFetchPlugin<ErrorTrackingOptions> = {
+  id: "error-tracking-plugin",
+  name: "Error Tracking Plugin",
+  description: "Sends errors to tracking service",
+  version: "1.0.0",
+  hooks: {
+    onError: async (context) => {
+      const errorData = {
+        status: context.error.status,
+        statusText: context.error.statusText,
+        url: context.request.url,
+        method: context.request.method,
+        error: context.error,
+      }
+      
+      context.request.trackError?.(errorData)
+    },
+  },
+}
+```
+
+## Using Plugins
+
+### With betterFetch
+
+```typescript
+import { betterFetch } from "better-fetch"
+import { loggingPlugin } from "./plugins"
+
+const { data, error } = await betterFetch("/api/users", {
+  plugins: [loggingPlugin],
+})
+```
+
+### With createFetch
+
+```typescript
+import { createFetch } from "better-fetch"
+import { loggingPlugin, cachePlugin } from "./plugins"
+
+const api = createFetch({
+  baseURL: "https://api.example.com",
+  plugins: [loggingPlugin, cachePlugin],
+})
+
+const { data, error } = await api("/users")
+```
+
+### Multiple Plugins
+
+```typescript
+const api = createFetch({
+  plugins: [
+    loggingPlugin,
+    cachePlugin,
+    rateLimitPlugin,
+    authRefreshPlugin,
+  ],
+})
+```
+
+<Note>
+  Plugins are executed in the order they are defined. The `init` methods run first, followed by lifecycle hooks in sequence.
+</Note>
+
+<Warning>
+  If multiple plugins modify the same property in `onRequest`, the last plugin's modification takes precedence. Design plugins to be composable and avoid conflicts.
+</Warning>
+
+## See Also
+
+- [betterFetch](/api/better-fetch) - Core fetch function
+- [createFetch](/api/create-fetch) - Create configured instance
+- [Types](/api/types) - Type definitions
+- [Error](/api/error) - Error handling

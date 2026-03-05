@@ -1,80 +1,228 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get up and running with Better Fetch in minutes"
 ---
 
-## Get started in three steps
+# Quickstart
 
-Get your documentation site running locally and make your first customization.
+This guide will help you make your first request with Better Fetch and explore its key features.
 
-### Step 1: Set up your local environment
+## Basic Request
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+<Steps>
+  <Step title="Import Better Fetch">
+    Start by importing the `betterFetch` function:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```typescript
+    import { betterFetch } from "@better-fetch/fetch";
+    ```
+  </Step>
+
+  <Step title="Make Your First Request">
+    Make a simple GET request and handle the response:
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    ```typescript
+    const { data, error } = await betterFetch("https://api.github.com/users/octocat");
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    if (error) {
+      console.error("Request failed:", error.status, error.statusText);
+      return;
+    }
+    
+    console.log("User data:", data);
+    ```
+    
+    <Note>
+      Notice the `{ data, error }` pattern - Better Fetch returns errors as values by default, no try/catch required!
+    </Note>
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Add Type Safety with Schema Validation">
+    Install a schema validator (we'll use Zod):
+    
+    ```bash
+    npm install zod
+    ```
+    
+    Then add schema validation to get full type safety:
+    
+    ```typescript
+    import { betterFetch } from "@better-fetch/fetch";
+    import { z } from "zod";
+    
+    const userSchema = z.object({
+      login: z.string(),
+      name: z.string(),
+      avatar_url: z.string(),
+      bio: z.string().nullable(),
+    });
+    
+    const { data, error } = await betterFetch("https://api.github.com/users/octocat", {
+      output: userSchema,
+    });
+    
+    if (error) {
+      console.error("Request failed:", error);
+      return;
+    }
+    
+    // data is now fully typed!
+    console.log(data.login); // TypeScript knows this is a string
+    ```
+    
+    <Tip>
+      The `output` option validates the response and provides automatic type inference!
+    </Tip>
+  </Step>
+</Steps>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## POST Request with Validation
 
-### Step 3: Go live
+Here's a complete example showing a POST request with both input and output validation:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+```typescript
+import { betterFetch } from "@better-fetch/fetch";
+import { z } from "zod";
 
-## Next steps
+// Define schemas
+const createUserSchema = z.object({
+  name: z.string(),
+  email: z.string().email(),
+});
 
-Now that you have your docs running, explore these key features:
+const userResponseSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  email: z.string(),
+  createdAt: z.string(),
+});
+
+// Make the request
+const { data, error } = await betterFetch("https://api.example.com/users", {
+  method: "POST",
+  body: {
+    name: "John Doe",
+    email: "john@example.com",
+  },
+  output: userResponseSchema,
+});
+
+if (error) {
+  console.error("Failed to create user:", error);
+  return;
+}
+
+console.log("Created user:", data.id, data.name);
+```
+
+## Error Handling Patterns
+
+Better Fetch offers flexible error handling:
+
+<Tabs>
+  <Tab title="Errors as Values (Default)">
+    The default pattern returns errors as values:
+    
+    ```typescript
+    const { data, error } = await betterFetch("https://api.example.com/data");
+    
+    if (error) {
+      // Handle error
+      if (error.status === 404) {
+        console.log("Resource not found");
+      } else if (error.status >= 500) {
+        console.log("Server error");
+      }
+      return;
+    }
+    
+    // Use data safely
+    console.log(data);
+    ```
+  </Tab>
+
+  <Tab title="Throw on Error">
+    If you prefer exceptions, use `throw: true`:
+    
+    ```typescript
+    try {
+      const data = await betterFetch("https://api.example.com/data", {
+        throw: true,
+      });
+      
+      console.log(data);
+    } catch (error) {
+      console.error("Request failed:", error);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Configure Headers and Auth
+
+Add authentication and custom headers:
+
+```typescript
+const { data, error } = await betterFetch("https://api.example.com/protected", {
+  headers: {
+    "content-type": "application/json",
+  },
+  auth: {
+    type: "Bearer",
+    token: "your-token-here",
+  },
+});
+```
+
+## Create a Configured Client
+
+For multiple requests to the same API, create a configured client:
+
+```typescript
+import { createFetch } from "@better-fetch/fetch";
+
+const api = createFetch({
+  baseURL: "https://api.example.com",
+  headers: {
+    "content-type": "application/json",
+  },
+  auth: {
+    type: "Bearer",
+    token: process.env.API_TOKEN,
+  },
+});
+
+// Now make requests with the configured client
+const { data, error } = await api("/users");
+```
+
+## Add Retry Logic
+
+Configure automatic retries for failed requests:
+
+```typescript
+const { data, error } = await betterFetch("https://api.example.com/data", {
+  retry: {
+    attempts: 3,
+    delay: 1000,
+    methods: ["GET", "POST"],
+  },
+});
+```
+
+## Next Steps
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Core Concepts" icon="book" href="/core/basic-usage">
+    Learn the fundamentals of Better Fetch
+  </Card>
+  <Card title="Schema Validation" icon="shield-check" href="/features/schema-validation">
+    Deep dive into schema validation
+  </Card>
+  <Card title="Hooks" icon="webhook" href="/features/hooks">
+    Use lifecycle hooks for custom behavior
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/better-fetch">
+    Explore the complete API
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

@@ -1,0 +1,228 @@
+---
+title: Schema Validation
+description: Validate request and response data with Standard Schema support
+---
+
+Better Fetch supports automatic schema validation using the [Standard Schema](https://github.com/standard-schema/standard-schema) specification. This allows you to use any validator that implements the standard, including Zod, Valibot, ArkType, and more.
+
+## Standard Schema Support
+
+The Standard Schema specification provides a unified interface for validation libraries. Better Fetch automatically validates data against your schemas and provides fully typed responses.
+
+```typescript
+import { z } from "zod";
+import { betterFetch } from "@better-fetch/fetch";
+
+const userSchema = z.object({
+  userId: z.number(),
+  id: z.number(),
+  title: z.string(),
+  completed: z.boolean(),
+});
+
+const { data, error } = await betterFetch(
+  "https://jsonplaceholder.typicode.com/todos/1",
+  {
+    output: userSchema,
+  }
+);
+
+// data is fully typed as { userId: number; id: number; title: string; completed: boolean }
+```
+
+## Response Validation (output)
+
+The `output` option validates the response data from the API:
+
+```typescript
+import { z } from "zod";
+
+const { data, error } = await betterFetch("/api/user", {
+  output: z.object({
+    name: z.string(),
+    email: z.string().email(),
+    age: z.number(),
+  }),
+});
+```
+
+<Note>
+  If validation fails, Better Fetch will throw a validation error with details about which fields failed.
+</Note>
+
+## Request Body Validation (input)
+
+The `input` option validates the request body before sending:
+
+```typescript
+const signInSchema = z.object({
+  username: z.string(),
+  password: z.string(),
+});
+
+const { data, error } = await betterFetch("/api/signin", {
+  method: "POST",
+  body: {
+    username: "john",
+    password: "secret123",
+  },
+  input: signInSchema,
+});
+```
+
+## Query Parameter Validation
+
+Validate query parameters with the `query` option:
+
+```typescript
+const { data, error } = await betterFetch("/api/search", {
+  query: {
+    term: "typescript",
+    page: 1,
+  },
+  // Schema for query validation
+  querySchema: z.object({
+    term: z.string(),
+    page: z.number().optional(),
+  }),
+});
+```
+
+## Path Parameter Validation
+
+Validate dynamic path parameters with the `params` option:
+
+```typescript
+const { data, error } = await betterFetch("/api/user/:id", {
+  params: {
+    id: 123,
+  },
+  // Schema for params validation
+  paramsSchema: z.object({
+    id: z.number(),
+  }),
+});
+```
+
+## Error Schema Validation
+
+Define a schema for error responses using `errorSchema`:
+
+```typescript
+const errorSchema = z.object({
+  message: z.string(),
+  code: z.string(),
+  details: z.array(z.string()).optional(),
+});
+
+const { data, error } = await betterFetch("/api/user", {
+  output: userSchema,
+  errorSchema: errorSchema,
+});
+
+if (error) {
+  // error.message, error.code, and error.details are now typed
+  console.log(error.message);
+}
+```
+
+## Disabling Validation
+
+You can temporarily disable validation using the `disableValidation` flag:
+
+```typescript
+const { data, error } = await betterFetch("/api/user", {
+  output: userSchema,
+  disableValidation: true, // Skip validation for this request
+});
+```
+
+<Warning>
+  Disabling validation means you won't get runtime type safety, even though TypeScript types will still be inferred.
+</Warning>
+
+## Using Different Validators
+
+### Zod
+
+```typescript
+import { z } from "zod";
+
+const schema = z.object({
+  name: z.string(),
+  age: z.number(),
+});
+
+const { data } = await betterFetch("/api/user", {
+  output: schema,
+});
+```
+
+### Valibot
+
+```typescript
+import * as v from "valibot";
+
+const schema = v.object({
+  name: v.string(),
+  age: v.number(),
+});
+
+const { data } = await betterFetch("/api/user", {
+  output: schema,
+});
+```
+
+### ArkType
+
+```typescript
+import { type } from "arktype";
+
+const schema = type({
+  name: "string",
+  age: "number",
+});
+
+const { data } = await betterFetch("/api/user", {
+  output: schema,
+});
+```
+
+## File and Blob Validation
+
+Better Fetch also supports Blob and File types as output schemas:
+
+```typescript
+// For Blob responses
+const { data } = await betterFetch("/api/download", {
+  output: Blob,
+});
+
+// For File responses
+const { data } = await betterFetch("/api/file", {
+  output: File,
+});
+```
+
+## Type Inference
+
+Better Fetch automatically infers types from your schemas:
+
+```typescript
+const schema = z.object({
+  id: z.number(),
+  name: z.string(),
+  email: z.string().email(),
+});
+
+const { data, error } = await betterFetch("/api/user", {
+  output: schema,
+});
+
+// data is typed as { id: number; name: string; email: string } | null
+// error is typed with status and statusText
+```
+
+<Tip>
+  Use Standard Schema for end-to-end type safety from your API schemas to your frontend code.
+</Tip>

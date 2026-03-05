@@ -1,0 +1,803 @@
+---
+title: "Creating Custom Plugins"
+description: "Build powerful custom plugins to extend Better Fetch functionality"
+---
+
+## Overview
+
+Custom plugins allow you to extend Better Fetch with your own functionality. Whether you need custom authentication, logging, caching, or schema transformations, plugins provide a structured way to add features.
+
+## Plugin Structure
+
+A plugin is an object that implements the `BetterFetchPlugin` interface:
+
+```typescript
+import type { BetterFetchPlugin } from "better-fetch";
+
+const myPlugin: BetterFetchPlugin = {
+  id: "my-plugin",           // Unique identifier
+  name: "My Plugin",          // Human-readable name
+  version: "1.0.0",          // Optional version
+  description: "Does something useful", // Optional description
+  init: async (url, options) => {
+    // Pre-request setup
+    return { url, options };
+  },
+  hooks: {
+    onRequest: async (context) => { /* ... */ },
+    onResponse: async (context) => { /* ... */ },
+    onSuccess: async (context) => { /* ... */ },
+    onError: async (context) => { /* ... */ },
+    onRetry: async (context) => { /* ... */ },
+  },
+  schema: { /* ... */ }, // Optional schema
+};
+```
+
+## Plugin Components
+
+### Required Fields
+
+<Steps>
+  <Step title="id">
+    A unique identifier for your plugin. Use reverse domain notation or descriptive names.
+    
+    ```typescript
+    id: "com.example.auth-plugin"
+    // or
+    id: "auth-plugin"
+    ```
+  </Step>
+  
+  <Step title="name">
+    A human-readable name for your plugin.
+    
+    ```typescript
+    name: "Authentication Plugin"
+    ```
+  </Step>
+</Steps>
+
+### Optional Fields
+
+<Steps>
+  <Step title="version">
+    Semantic version for tracking and compatibility.
+    
+    ```typescript
+    version: "1.2.3"
+    ```
+  </Step>
+  
+  <Step title="description">
+    Brief explanation of what the plugin does.
+    
+    ```typescript
+    description: "Automatically adds JWT authentication headers to requests"
+    ```
+  </Step>
+</Steps>
+
+## The init Function
+
+The `init` function is called before the request is made, allowing you to modify the URL and options:
+
+```typescript
+const plugin = {
+  id: "api-prefix",
+  name: "API Prefix Plugin",
+  init: async (url, options) => {
+    // Add /api prefix to all URLs
+    const modifiedUrl = url.startsWith("/") ? `/api${url}` : url;
+    
+    // Add custom header
+    const modifiedOptions = {
+      ...options,
+      headers: {
+        ...options?.headers,
+        "X-Plugin-Init": "true",
+      },
+    };
+    
+    return {
+      url: modifiedUrl,
+      options: modifiedOptions,
+    };
+  },
+};
+```
+
+### init Signature
+
+```typescript
+init?: (
+  url: string,
+  options?: BetterFetchOption & ExtraOptions
+) => Promise<{
+  url: string;
+  options?: BetterFetchOption;
+}> | {
+  url: string;
+  options?: BetterFetchOption;
+};
+```
+
+### init Use Cases
+
+- Transform URLs (add prefixes, replace domains)
+- Add/modify headers
+- Validate options
+- Set up authentication
+- Configure schema-based routing
+
+## Plugin Hooks
+
+Hooks allow you to intercept and modify different stages of the request lifecycle.
+
+### onRequest Hook
+
+Called before the request is sent:
+
+```typescript
+const requestLogger = {
+  id: "request-logger",
+  name: "Request Logger",
+  hooks: {
+    onRequest: async (context) => {
+      console.log("Request:", {
+        url: context.url.toString(),
+        method: context.method,
+        headers: Object.fromEntries(context.headers),
+        body: context.body,
+      });
+      
+      // Optionally modify the context
+      return {
+        ...context,
+        headers: new Headers({
+          ...Object.fromEntries(context.headers),
+          "X-Request-ID": crypto.randomUUID(),
+        }),
+      };
+    },
+  },
+};
+```
+
+### onResponse Hook
+
+Called after the response is received, before parsing:
+
+```typescript
+const responseTransformer = {
+  id: "response-transformer",
+  name: "Response Transformer",
+  hooks: {
+    onResponse: async (context) => {
+      console.log("Response:", context.response.status);
+      
+      // Transform 304 Not Modified to 200 with cached data
+      if (context.response.status === 304) {
+        const cachedData = getCachedData(context.request.url.toString());
+        return new Response(JSON.stringify(cachedData), {
+          status: 200,
+          headers: context.response.headers,
+        });
+      }
+      
+      // Return modified response or void
+      return context.response;
+    },
+  },
+};
+```
+
+### onSuccess Hook
+
+Called when a request completes successfully:
+
+```typescript
+const successTracker = {
+  id: "success-tracker",
+  name: "Success Tracker",
+  hooks: {
+    onSuccess: async (context) => {
+      // Track successful requests
+      analytics.track("api_call_success", {
+        url: context.request.url.toString(),
+        method: context.request.method,
+        status: context.response.status,
+        dataSize: JSON.stringify(context.data).length,
+      });
+      
+      // Cache the response
+      cache.set(context.request.url.toString(), context.data);
+    },
+  },
+};
+```
+
+### onError Hook
+
+Called when a request fails:
+
+```typescript
+const errorHandler = {
+  id: "error-handler",
+  name: "Error Handler",
+  hooks: {
+    onError: async (context) => {
+      console.error("Request failed:", {
+        url: context.request.url.toString(),
+        status: context.error.status,
+        error: context.error,
+      });
+      
+      // Send to error tracking service
+      if (context.error.status >= 500) {
+        await errorTracker.captureException(context.error, {
+          tags: {
+            url: context.request.url.toString(),
+            status: context.error.status,
+          },
+        });
+      }
+    },
+  },
+};
+```
+
+### onRetry Hook
+
+Called when a request is being retried:
+
+```typescript
+const retryLogger = {
+  id: "retry-logger",
+  name: "Retry Logger",
+  hooks: {
+    onRetry: async (context) => {
+      console.warn("Retrying request:", {
+        url: context.request.url.toString(),
+        attempt: context.request.retryAttempt,
+        previousStatus: context.response.status,
+      });
+    },
+  },
+};
+```
+
+## Plugin Options
+
+Plugins can accept custom options through TypeScript generics:
+
+```typescript
+type MyPluginOptions = {
+  apiKey: string;
+  environment: "dev" | "prod";
+};
+
+const createMyPlugin = (config: MyPluginOptions): BetterFetchPlugin<MyPluginOptions> => ({
+  id: "my-plugin",
+  name: "My Plugin",
+  init: async (url, options) => {
+    return {
+      url,
+      options: {
+        ...options,
+        headers: {
+          ...options?.headers,
+          "X-API-Key": config.apiKey,
+          "X-Environment": config.environment,
+        },
+      },
+    };
+  },
+});
+
+// Usage
+const $fetch = createFetch({
+  plugins: [
+    createMyPlugin({
+      apiKey: "your-api-key",
+      environment: "prod",
+    }),
+  ],
+});
+```
+
+## Schema Plugins
+
+Plugins can define their own schemas that integrate with the type system:
+
+```typescript
+import { z } from "zod";
+import { createSchema } from "better-fetch";
+import type { BetterFetchPlugin } from "better-fetch";
+
+const apiPlugin: BetterFetchPlugin = {
+  id: "external-api",
+  name: "External API Plugin",
+  schema: createSchema({
+    "/external/users": {
+      method: "get",
+      output: z.array(z.object({
+        id: z.number(),
+        username: z.string(),
+        email: z.string(),
+      })),
+    },
+    "/external/users/:id": {
+      method: "get",
+      params: z.object({
+        id: z.string(),
+      }),
+      output: z.object({
+        id: z.number(),
+        username: z.string(),
+        email: z.string(),
+        profile: z.object({
+          bio: z.string(),
+          avatar: z.string(),
+        }),
+      }),
+    },
+    "/external/users/create": {
+      method: "post",
+      input: z.object({
+        username: z.string(),
+        email: z.string(),
+        password: z.string(),
+      }),
+      output: z.object({
+        id: z.number(),
+        username: z.string(),
+      }),
+    },
+  }, {
+    prefix: "/external",
+    baseURL: "https://external-api.example.com",
+  }),
+  init: async (url, options) => {
+    // Transform prefix to baseURL
+    if (url.startsWith("/external")) {
+      return {
+        url: url.replace("/external", "https://external-api.example.com"),
+        options,
+      };
+    }
+    return { url, options };
+  },
+};
+```
+
+### Schema Configuration
+
+Configure how the schema behaves:
+
+```typescript
+schema: createSchema(schemaRoutes, {
+  // Only allow defined routes (strict mode)
+  strict: true,
+  
+  // URL prefix for schema routes
+  prefix: "/api/v1",
+  
+  // Base URL for schema routes
+  baseURL: "https://api.example.com",
+})
+```
+
+## Best Practices
+
+### 1. Use Descriptive IDs and Names
+
+```typescript
+// Good
+id: "com.company.auth-plugin"
+name: "Company Authentication Plugin"
+
+// Avoid
+id: "plugin1"
+name: "Plugin"
+```
+
+### 2. Handle Errors Gracefully
+
+```typescript
+const robustPlugin = {
+  id: "robust-plugin",
+  name: "Robust Plugin",
+  hooks: {
+    onRequest: async (context) => {
+      try {
+        // Your logic here
+        return modifiedContext;
+      } catch (error) {
+        console.error("Plugin error:", error);
+        // Return original context on error
+        return context;
+      }
+    },
+  },
+};
+```
+
+### 3. Avoid Side Effects in init
+
+The `init` function should be pure and not cause side effects:
+
+```typescript
+// Good
+init: async (url, options) => {
+  return {
+    url: transformUrl(url),
+    options: addHeaders(options),
+  };
+}
+
+// Avoid
+init: async (url, options) => {
+  sendAnalytics("init called"); // Side effect
+  return { url, options };
+}
+```
+
+### 4. Document Your Plugin
+
+```typescript
+/**
+ * Authentication Plugin
+ * 
+ * Automatically adds JWT tokens to request headers.
+ * Refreshes tokens when they expire.
+ * 
+ * @example
+ * ```ts
+ * const $fetch = createFetch({
+ *   plugins: [createAuthPlugin({ tokenUrl: "/auth/token" })],
+ * });
+ * ```
+ */
+const createAuthPlugin = (config: AuthConfig): BetterFetchPlugin => ({
+  id: "auth-plugin",
+  name: "Authentication Plugin",
+  description: "Manages JWT authentication",
+  version: "1.0.0",
+  // ...
+});
+```
+
+### 5. Make Plugins Configurable
+
+```typescript
+type CachePluginConfig = {
+  maxAge?: number;
+  maxSize?: number;
+  exclude?: string[];
+};
+
+const createCachePlugin = (config: CachePluginConfig = {}): BetterFetchPlugin => {
+  const {
+    maxAge = 5 * 60 * 1000, // 5 minutes
+    maxSize = 100,
+    exclude = [],
+  } = config;
+  
+  return {
+    id: "cache-plugin",
+    name: "Caching Plugin",
+    // Implementation
+  };
+};
+```
+
+## Complete Examples
+
+### Authentication Plugin
+
+```typescript
+type AuthPluginConfig = {
+  tokenGetter: () => Promise<string | null>;
+  tokenRefresh?: () => Promise<string>;
+  headerName?: string;
+};
+
+const createAuthPlugin = (config: AuthPluginConfig): BetterFetchPlugin => ({
+  id: "auth-plugin",
+  name: "Authentication Plugin",
+  version: "1.0.0",
+  description: "Handles authentication tokens",
+  
+  init: async (url, options) => {
+    const token = await config.tokenGetter();
+    
+    if (!token) {
+      return { url, options };
+    }
+    
+    return {
+      url,
+      options: {
+        ...options,
+        headers: {
+          ...options?.headers,
+          [config.headerName || "Authorization"]: `Bearer ${token}`,
+        },
+      },
+    };
+  },
+  
+  hooks: {
+    onError: async (context) => {
+      if (context.error.status === 401 && config.tokenRefresh) {
+        // Token expired, refresh it
+        try {
+          await config.tokenRefresh();
+        } catch (error) {
+          console.error("Token refresh failed:", error);
+        }
+      }
+    },
+  },
+});
+
+// Usage
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  plugins: [
+    createAuthPlugin({
+      tokenGetter: async () => localStorage.getItem("token"),
+      tokenRefresh: async () => {
+        const newToken = await refreshToken();
+        localStorage.setItem("token", newToken);
+        return newToken;
+      },
+    }),
+  ],
+});
+```
+
+### Performance Monitoring Plugin
+
+```typescript
+type MetricsConfig = {
+  onMetric?: (metric: RequestMetric) => void;
+};
+
+type RequestMetric = {
+  url: string;
+  method: string;
+  duration: number;
+  status: number;
+  success: boolean;
+};
+
+const createMetricsPlugin = (config: MetricsConfig = {}): BetterFetchPlugin => ({
+  id: "metrics-plugin",
+  name: "Performance Metrics Plugin",
+  version: "1.0.0",
+  
+  hooks: {
+    onRequest: async (context) => {
+      // Store start time
+      (context as any)._startTime = Date.now();
+    },
+    
+    onSuccess: async (context) => {
+      const duration = Date.now() - (context.request as any)._startTime;
+      
+      const metric: RequestMetric = {
+        url: context.request.url.toString(),
+        method: context.request.method,
+        duration,
+        status: context.response.status,
+        success: true,
+      };
+      
+      config.onMetric?.(metric);
+    },
+    
+    onError: async (context) => {
+      const duration = Date.now() - (context.request as any)._startTime;
+      
+      const metric: RequestMetric = {
+        url: context.request.url.toString(),
+        method: context.request.method,
+        duration,
+        status: context.error.status,
+        success: false,
+      };
+      
+      config.onMetric?.(metric);
+    },
+  },
+});
+
+// Usage
+const $fetch = createFetch({
+  plugins: [
+    createMetricsPlugin({
+      onMetric: (metric) => {
+        console.log(`${metric.method} ${metric.url} - ${metric.duration}ms`);
+        analytics.track("api_request", metric);
+      },
+    }),
+  ],
+});
+```
+
+### Caching Plugin
+
+```typescript
+type CacheEntry = {
+  data: any;
+  timestamp: number;
+};
+
+const createCachePlugin = (maxAge: number = 5 * 60 * 1000): BetterFetchPlugin => {
+  const cache = new Map<string, CacheEntry>();
+  
+  return {
+    id: "cache-plugin",
+    name: "Response Caching Plugin",
+    version: "1.0.0",
+    
+    hooks: {
+      onRequest: async (context) => {
+        // Only cache GET requests
+        if (context.method !== "GET") return;
+        
+        const cacheKey = context.url.toString();
+        const cached = cache.get(cacheKey);
+        
+        if (cached && Date.now() - cached.timestamp < maxAge) {
+          console.log("Cache hit:", cacheKey);
+          // Store cached data for use in response
+          (context as any)._cached = cached.data;
+        }
+      },
+      
+      onResponse: async (context) => {
+        // Return cached data if available
+        if ((context.request as any)._cached) {
+          return new Response(
+            JSON.stringify((context.request as any)._cached),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+      },
+      
+      onSuccess: async (context) => {
+        // Cache successful GET requests
+        if (context.request.method === "GET") {
+          cache.set(context.request.url.toString(), {
+            data: context.data,
+            timestamp: Date.now(),
+          });
+        }
+      },
+    },
+  };
+};
+
+// Usage
+const $fetch = createFetch({
+  plugins: [createCachePlugin(10 * 60 * 1000)], // 10 minute cache
+});
+```
+
+### Request/Response Logger Plugin
+
+```typescript
+type LoggerConfig = {
+  logRequests?: boolean;
+  logResponses?: boolean;
+  logErrors?: boolean;
+  logBody?: boolean;
+};
+
+const createLoggerPlugin = (config: LoggerConfig = {}): BetterFetchPlugin => {
+  const {
+    logRequests = true,
+    logResponses = true,
+    logErrors = true,
+    logBody = false,
+  } = config;
+  
+  return {
+    id: "logger-plugin",
+    name: "Request Logger Plugin",
+    version: "1.0.0",
+    
+    hooks: {
+      onRequest: logRequests ? async (context) => {
+        console.group(`→ ${context.method} ${context.url}`);
+        console.log("Headers:", Object.fromEntries(context.headers));
+        if (logBody && context.body) {
+          console.log("Body:", context.body);
+        }
+        console.groupEnd();
+      } : undefined,
+      
+      onResponse: logResponses ? async (context) => {
+        console.log(`← ${context.response.status} ${context.request.url}`);
+      } : undefined,
+      
+      onError: logErrors ? async (context) => {
+        console.group(`✗ ${context.error.status} ${context.request.url}`);
+        console.error("Error:", context.error);
+        console.groupEnd();
+      } : undefined,
+    },
+  };
+};
+
+// Usage
+const $fetch = createFetch({
+  plugins: [
+    createLoggerPlugin({
+      logRequests: true,
+      logResponses: true,
+      logErrors: true,
+      logBody: process.env.NODE_ENV === "development",
+    }),
+  ],
+});
+```
+
+## Testing Plugins
+
+Test your plugins thoroughly:
+
+```typescript
+import { describe, it, expect } from "vitest";
+import { createFetch } from "better-fetch";
+import { myPlugin } from "./my-plugin";
+
+describe("My Plugin", () => {
+  it("should add custom header", async () => {
+    const $fetch = createFetch({
+      plugins: [myPlugin],
+      customFetchImpl: async (url, init) => {
+        expect(init?.headers?.get("X-Custom-Header")).toBe("value");
+        return new Response(JSON.stringify({ ok: true }));
+      },
+    });
+    
+    await $fetch("https://api.example.com/test");
+  });
+  
+  it("should transform URL", async () => {
+    const $fetch = createFetch({
+      plugins: [myPlugin],
+      customFetchImpl: async (url, init) => {
+        expect(url.toString()).toBe("https://transformed-api.example.com/test");
+        return new Response(JSON.stringify({ ok: true }));
+      },
+    });
+    
+    await $fetch("https://api.example.com/test");
+  });
+});
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Plugin System" icon="puzzle-piece" href="/advanced/plugins">
+    Learn about the plugin system
+  </Card>
+  <Card title="createFetch" icon="wrench" href="/advanced/create-fetch">
+    Configure custom fetch instances
+  </Card>
+  <Card title="Hooks" icon="webhook" href="/features/hooks">
+    Request and response hooks
+  </Card>
+  <Card title="Type Safety" icon="shield" href="/core/type-safety">
+    Type-safe schemas
+  </Card>
+</CardGroup>

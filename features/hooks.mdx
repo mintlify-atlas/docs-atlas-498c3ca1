@@ -1,0 +1,363 @@
+---
+title: Hooks
+description: Intercept and modify requests and responses with lifecycle hooks
+---
+
+Better Fetch provides a powerful hook system that allows you to intercept and modify requests and responses at various stages of the fetch lifecycle.
+
+## Hook System Overview
+
+Hooks are callback functions that execute at specific points during a request:
+
+- **onRequest**: Called before the request is sent
+- **onResponse**: Called when a response is received (before parsing)
+- **onSuccess**: Called when the request succeeds
+- **onError**: Called when the request fails
+- **onRetry**: Called before a retry attempt
+
+## onRequest Hook
+
+The `onRequest` hook is called before the request is sent. You can modify the request context or perform actions like logging or adding authentication.
+
+```typescript
+const { data } = await betterFetch("/api/user", {
+  onRequest: async (context) => {
+    // Log the request
+    console.log(`Making request to: ${context.url}`);
+    
+    // Add custom headers
+    context.headers.set("X-Custom-Header", "value");
+    
+    // Return modified context
+    return context;
+  },
+});
+```
+
+### RequestContext
+
+The request context contains:
+
+```typescript
+type RequestContext = {
+  url: URL | string;          // Request URL
+  headers: Headers;           // Request headers
+  body: any;                  // Request body
+  method: string;             // HTTP method
+  signal: AbortSignal;        // Abort signal
+  // ... all other BetterFetchOption properties
+};
+```
+
+### Modifying the Request
+
+```typescript
+await betterFetch("/api/data", {
+  onRequest: (context) => {
+    // Modify headers
+    context.headers.set("Authorization", `Bearer ${token}`);
+    
+    // Change the method
+    context.method = "POST";
+    
+    // Add/modify body
+    context.body = JSON.stringify({ ...context.body, timestamp: Date.now() });
+    
+    return context;
+  },
+});
+```
+
+## onResponse Hook
+
+The `onResponse` hook is called when a response is received, before it's parsed and returned. This is useful for response transformation or custom error handling.
+
+```typescript
+const { data } = await betterFetch("/api/user", {
+  onResponse: async (context) => {
+    console.log(`Received status: ${context.response.status}`);
+    
+    // You can return a modified response
+    return context.response;
+  },
+});
+```
+
+### ResponseContext
+
+The response context contains:
+
+```typescript
+type ResponseContext = {
+  response: Response;         // The Response object
+  request: RequestContext;    // The original request context
+};
+```
+
+### Transforming Responses
+
+```typescript
+await betterFetch("/api/data", {
+  onResponse: async (context) => {
+    // Log response time
+    const duration = performance.now() - startTime;
+    console.log(`Request took ${duration}ms`);
+    
+    // Return modified response or context
+    return context;
+  },
+});
+```
+
+## onSuccess Hook
+
+The `onSuccess` hook is called when a request completes successfully (2xx status code).
+
+```typescript
+const { data } = await betterFetch("/api/user", {
+  onSuccess: async (context) => {
+    console.log("Request succeeded!");
+    console.log("Data:", context.data);
+    
+    // Perform side effects like caching
+    cache.set(context.request.url, context.data);
+  },
+});
+```
+
+### SuccessContext
+
+The success context contains:
+
+```typescript
+type SuccessContext<Res = any> = {
+  data: Res;                  // The parsed response data
+  response: Response;         // The Response object
+  request: RequestContext;    // The original request context
+};
+```
+
+### Example: Caching
+
+```typescript
+const cache = new Map();
+
+await betterFetch("/api/user/123", {
+  onSuccess: (context) => {
+    // Cache successful responses
+    const cacheKey = context.request.url.toString();
+    cache.set(cacheKey, {
+      data: context.data,
+      timestamp: Date.now(),
+    });
+  },
+});
+```
+
+## onError Hook
+
+The `onError` hook is called when a request fails (non-2xx status code).
+
+```typescript
+const { data, error } = await betterFetch("/api/user", {
+  onError: async (context) => {
+    console.error(`Request failed with status ${context.error.status}`);
+    console.error("Error:", context.error);
+    
+    // Send to error tracking service
+    trackError(context.error);
+  },
+});
+```
+
+### ErrorContext
+
+The error context contains:
+
+```typescript
+type ErrorContext = {
+  response: Response;         // The Response object
+  request: RequestContext;    // The original request context
+  error: {                    // Error details
+    status: number;
+    statusText: string;
+    // ... any other error properties from the response
+  };
+};
+```
+
+### Example: Error Tracking
+
+```typescript
+await betterFetch("/api/data", {
+  onError: async (context) => {
+    // Log detailed error information
+    const errorInfo = {
+      url: context.request.url,
+      method: context.request.method,
+      status: context.error.status,
+      message: context.error.statusText,
+    };
+    
+    // Send to error tracking service
+    await errorTracker.log(errorInfo);
+  },
+});
+```
+
+## onRetry Hook
+
+The `onRetry` hook is called before each retry attempt when using the retry option.
+
+```typescript
+let retryCount = 0;
+
+const { data } = await betterFetch("/api/unstable", {
+  retry: 3,
+  onRetry: async (context) => {
+    retryCount++;
+    console.log(`Retry attempt ${retryCount}`);
+    console.log(`Previous status: ${context.response.status}`);
+  },
+  onError: () => {
+    console.log(`Total errors: ${retryCount + 1}`);
+  },
+});
+```
+
+## Hook Options
+
+### Clone Response
+
+By default, hooks receive the original Response object. If you need to read the response body in a hook and also want to use it later, you need to clone it:
+
+```typescript
+await betterFetch("/api/user", {
+  hookOptions: {
+    cloneResponse: true,  // Clone response for each hook
+  },
+  onResponse: async (context) => {
+    // Safe to read the body since it's cloned
+    const body = await context.response.text();
+    console.log("Response body:", body);
+  },
+});
+```
+
+<Warning>
+  Reading a Response body consumes it. Use `cloneResponse: true` if you need to read the response in hooks.
+</Warning>
+
+## Combining Hooks
+
+You can use multiple hooks together to create complex request/response handling:
+
+```typescript
+const startTime = Date.now();
+
+const { data } = await betterFetch("/api/data", {
+  onRequest: (context) => {
+    console.log("→ Starting request...");
+    context.headers.set("X-Request-ID", crypto.randomUUID());
+    return context;
+  },
+  onResponse: (context) => {
+    const duration = Date.now() - startTime;
+    console.log(`← Received response in ${duration}ms`);
+    return context;
+  },
+  onSuccess: (context) => {
+    console.log("✓ Request succeeded");
+  },
+  onError: (context) => {
+    console.error("✗ Request failed:", context.error.status);
+  },
+});
+```
+
+## Using Hooks with createFetch
+
+Hooks can be defined globally when creating a fetch instance:
+
+```typescript
+import { createFetch } from "@better-fetch/fetch";
+
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  onRequest: (context) => {
+    // This will run for all requests
+    console.log(`Request to ${context.url}`);
+    return context;
+  },
+  onError: (context) => {
+    // Global error handling
+    console.error(`Error: ${context.error.status}`);
+  },
+});
+
+// Use the instance
+const { data } = await $fetch("/user");
+```
+
+<Tip>
+  Global hooks are useful for consistent logging, authentication, and error tracking across all requests.
+</Tip>
+
+## Hook Execution Order
+
+Hooks execute in the following order:
+
+1. **onRequest** - Before sending the request
+2. Request is sent
+3. **onResponse** - After receiving response (before parsing)
+4. Response is parsed
+5. **onSuccess** OR **onError** - Depending on response status
+6. **onRetry** - If retry is configured and needed (then loop back to step 1)
+
+## Advanced Example: Request Logger
+
+```typescript
+const createLogger = () => {
+  const requests = new Map();
+  
+  return {
+    onRequest: (context) => {
+      const requestId = crypto.randomUUID();
+      requests.set(requestId, {
+        url: context.url,
+        method: context.method,
+        startTime: Date.now(),
+      });
+      context.headers.set("X-Request-ID", requestId);
+      return context;
+    },
+    onResponse: (context) => {
+      const requestId = context.request.headers.get("X-Request-ID");
+      const request = requests.get(requestId);
+      if (request) {
+        request.duration = Date.now() - request.startTime;
+        request.status = context.response.status;
+      }
+      return context;
+    },
+    onSuccess: (context) => {
+      const requestId = context.request.headers.get("X-Request-ID");
+      const request = requests.get(requestId);
+      console.log(`✓ ${request.method} ${request.url} - ${request.status} (${request.duration}ms)`);
+      requests.delete(requestId);
+    },
+    onError: (context) => {
+      const requestId = context.request.headers.get("X-Request-ID");
+      const request = requests.get(requestId);
+      console.error(`✗ ${request.method} ${request.url} - ${context.error.status} (${request.duration}ms)`);
+      requests.delete(requestId);
+    },
+  };
+};
+
+const logger = createLogger();
+
+const { data } = await betterFetch("/api/user", {
+  ...logger,
+});
+```

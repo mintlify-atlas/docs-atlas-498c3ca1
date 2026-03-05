@@ -1,0 +1,331 @@
+---
+title: "betterFetch"
+description: "Core function for making HTTP requests with Better Fetch"
+---
+
+## Overview
+
+The `betterFetch` function is the main entry point for making HTTP requests. It provides a powerful, type-safe wrapper around the native Fetch API with advanced features like automatic retries, schema validation, and plugin support.
+
+## Function Signature
+
+```typescript
+export const betterFetch: <
+  TRes extends Option["output"] extends StandardSchemaV1
+    ? StandardSchemaV1.InferOutput<Option["output"]>
+    : unknown,
+  TErr = unknown,
+  Option extends BetterFetchOption = BetterFetchOption<any, any, any, TRes>,
+>(
+  url: string,
+  options?: Option,
+) => Promise<
+  BetterFetchResponse<
+    TRes,
+    TErr,
+    Option["throw"] extends true ? true : TErr extends false ? true : false
+  >
+>
+```
+
+## Type Parameters
+
+<ParamField type="generic" name="TRes" default="unknown">
+  The expected response data type. When `output` schema is provided, this is automatically inferred from the schema.
+</ParamField>
+
+<ParamField type="generic" name="TErr" default="unknown">
+  The expected error type. Can be customized to match your API's error structure.
+</ParamField>
+
+<ParamField type="generic" name="Option" default="BetterFetchOption">
+  The options type, extending `BetterFetchOption` with any custom plugin options.
+</ParamField>
+
+## Parameters
+
+<ParamField path="url" type="string" required>
+  The URL to make the request to. Can be a relative path if `baseURL` is configured in options.
+  
+  ```typescript
+  await betterFetch("/api/users")
+  await betterFetch("https://api.example.com/users")
+  ```
+</ParamField>
+
+<ParamField path="options" type="BetterFetchOption">
+  Configuration options for the request. See [BetterFetchOption](/api/types#betterfetchoption) for all available options.
+
+  <Expandable title="Common Options">
+    <ParamField path="method" type="string" default="GET">
+      HTTP method: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`
+    </ParamField>
+
+    <ParamField path="body" type="any">
+      Request body. Automatically serialized based on content type.
+    </ParamField>
+
+    <ParamField path="headers" type="CustomHeaders">
+      Request headers with type-safe common headers.
+    </ParamField>
+
+    <ParamField path="query" type="Record<string, any>">
+      Query parameters to append to the URL.
+    </ParamField>
+
+    <ParamField path="params" type="Record<string, any> | Array<string>">
+      Dynamic path parameters. If URL contains `:id`, provide `{ id: "123" }`.
+    </ParamField>
+
+    <ParamField path="baseURL" type="string">
+      Base URL prepended to the request URL.
+    </ParamField>
+
+    <ParamField path="timeout" type="number">
+      Request timeout in milliseconds.
+    </ParamField>
+
+    <ParamField path="throw" type="boolean" default="false">
+      If `true`, throws `BetterFetchError` on failed requests instead of returning error in response.
+    </ParamField>
+
+    <ParamField path="output" type="StandardSchemaV1">
+      Schema for validating and typing the response data. Supports Zod, Valibot, ArkType, etc.
+    </ParamField>
+
+    <ParamField path="retry" type="RetryOptions">
+      Retry configuration. Can be a number (retry attempts) or detailed retry strategy.
+    </ParamField>
+
+    <ParamField path="plugins" type="BetterFetchPlugin[]">
+      Array of plugins to extend functionality.
+    </ParamField>
+
+    <ParamField path="auth" type="Auth">
+      Authentication configuration (Bearer, Basic, or Custom).
+    </ParamField>
+
+    <ParamField path="customFetchImpl" type="FetchEsque">
+      Custom fetch implementation to use instead of native fetch.
+    </ParamField>
+
+    <ParamField path="jsonParser" type="(text: string) => Promise<any> | any">
+      Custom JSON parser function.
+    </ParamField>
+
+    <ParamField path="disableValidation" type="boolean" default="false">
+      Disable schema validation for this request.
+    </ParamField>
+
+    <ParamField path="signal" type="AbortSignal">
+      AbortSignal for cancelling the request.
+    </ParamField>
+  </Expandable>
+
+  <Expandable title="Lifecycle Hooks">
+    <ParamField path="onRequest" type="(context: RequestContext) => Promise<RequestContext | void>">
+      Called before the request is sent. Can modify the request context.
+    </ParamField>
+
+    <ParamField path="onResponse" type="(context: ResponseContext) => Promise<Response | void>">
+      Called when response is received, before parsing.
+    </ParamField>
+
+    <ParamField path="onSuccess" type="(context: SuccessContext) => Promise<void>">
+      Called when request succeeds (2xx status).
+    </ParamField>
+
+    <ParamField path="onError" type="(context: ErrorContext) => Promise<void>">
+      Called when request fails (non-2xx status).
+    </ParamField>
+
+    <ParamField path="onRetry" type="(context: ResponseContext) => Promise<void>">
+      Called before a retry attempt.
+    </ParamField>
+
+    <ParamField path="hookOptions.cloneResponse" type="boolean" default="false">
+      Clone the response object in hooks to allow multiple reads.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Return Type
+
+<ResponseField name="BetterFetchResponse" type="BetterFetchResponse<TRes, TErr>">
+  The response object varies based on the `throw` option:
+
+  **When `throw: false` (default):**
+  ```typescript
+  type BetterFetchResponse<T, E> = 
+    | { data: T; error: null }
+    | { data: null; error: E & { status: number; statusText: string } }
+  ```
+
+  **When `throw: true`:**
+  ```typescript
+  type BetterFetchResponse<T> = T
+  ```
+  Throws `BetterFetchError` on failure.
+</ResponseField>
+
+## Examples
+
+### Basic GET Request
+
+```typescript
+const { data, error } = await betterFetch("/api/users")
+
+if (error) {
+  console.error(error.status, error.statusText)
+} else {
+  console.log(data)
+}
+```
+
+### POST with Body and Schema Validation
+
+```typescript
+import { z } from "zod"
+
+const userSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  email: z.string().email(),
+})
+
+const { data, error } = await betterFetch("/api/users", {
+  method: "POST",
+  body: {
+    name: "John Doe",
+    email: "john@example.com"
+  },
+  output: userSchema,
+})
+
+// data is typed as z.infer<typeof userSchema>
+```
+
+### With Automatic Retries
+
+```typescript
+const { data, error } = await betterFetch("/api/users", {
+  retry: {
+    type: "exponential",
+    attempts: 3,
+    baseDelay: 1000,
+    maxDelay: 5000,
+    shouldRetry: (response) => {
+      return response?.status === 429 || response?.status >= 500
+    },
+  },
+})
+```
+
+### Throw Mode
+
+```typescript
+try {
+  const user = await betterFetch("/api/users/123", {
+    throw: true,
+    output: userSchema,
+  })
+  // user is directly typed as the schema output, not wrapped in { data, error }
+  console.log(user.name)
+} catch (error) {
+  if (error instanceof BetterFetchError) {
+    console.error(error.status, error.statusText, error.error)
+  }
+}
+```
+
+### With Query Parameters and Path Params
+
+```typescript
+const { data, error } = await betterFetch("/api/users/:id/posts", {
+  params: { id: "123" },
+  query: {
+    page: 1,
+    limit: 10,
+    sort: "created_at",
+  },
+})
+// Requests: /api/users/123/posts?page=1&limit=10&sort=created_at
+```
+
+### With Authentication
+
+```typescript
+const { data, error } = await betterFetch("/api/protected", {
+  auth: {
+    type: "Bearer",
+    token: "your-token-here",
+  },
+})
+```
+
+### With Custom Headers
+
+```typescript
+const { data, error } = await betterFetch("/api/data", {
+  headers: {
+    "content-type": "application/json",
+    "x-api-key": "your-api-key",
+    "accept": "application/json",
+  },
+})
+```
+
+### With Timeout
+
+```typescript
+const { data, error } = await betterFetch("/api/slow-endpoint", {
+  timeout: 5000, // 5 seconds
+})
+```
+
+### Using Lifecycle Hooks
+
+```typescript
+const { data, error } = await betterFetch("/api/users", {
+  onRequest: async (context) => {
+    console.log("Sending request to:", context.url)
+    // Add authentication header dynamically
+    context.headers.set("authorization", `Bearer ${await getToken()}`)
+    return context
+  },
+  onSuccess: async (context) => {
+    console.log("Request succeeded:", context.data)
+  },
+  onError: async (context) => {
+    console.error("Request failed:", context.error)
+  },
+})
+```
+
+## Request Flow
+
+1. **Plugin Initialization**: Plugins are initialized and their `init` methods are called
+2. **Context Construction**: URL, headers, body, method, and signal are prepared
+3. **onRequest Hooks**: All `onRequest` hooks are executed in order
+4. **Fetch Execution**: The actual fetch call is made
+5. **onResponse Hooks**: All `onResponse` hooks are executed
+6. **Response Handling**:
+   - **Success (2xx)**: Response is parsed, validated with `output` schema if provided, `onSuccess` hooks are called
+   - **Error (non-2xx)**: Error object is constructed, `onError` hooks are called, retry logic is applied if configured
+7. **Return**: Data or error is returned based on `throw` option
+
+<Note>
+  The response body is automatically detected and parsed as JSON, text, blob, arrayBuffer, or formData based on the `Content-Type` header.
+</Note>
+
+<Warning>
+  When using `throw: true`, the function returns the data directly and throws on errors. This changes the return type and error handling pattern.
+</Warning>
+
+## See Also
+
+- [createFetch](/api/create-fetch) - Create a configured fetch instance
+- [BetterFetchOption](/api/types#betterfetchoption) - All available options
+- [BetterFetchResponse](/api/types#betterfetchresponse) - Response type details
+- [Plugins](/api/plugins) - Plugin system documentation
+- [BetterFetchError](/api/error) - Error handling

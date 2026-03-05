@@ -1,0 +1,432 @@
+---
+title: Timeout & Retry
+description: Configure request timeouts and automatic retry strategies
+---
+
+Better Fetch provides built-in support for request timeouts and automatic retry logic with multiple strategies.
+
+## Timeout
+
+Set a timeout to abort requests that take too long:
+
+```typescript
+import { betterFetch } from "@better-fetch/fetch";
+
+const { data, error } = await betterFetch("/api/slow", {
+  timeout: 5000,  // Abort after 5 seconds
+});
+
+if (error) {
+  console.log("Request timed out or failed");
+}
+```
+
+### How Timeout Works
+
+Better Fetch uses `AbortController` internally to cancel requests:
+
+```typescript
+// Timeout is specified in milliseconds
+await betterFetch("/api/data", {
+  timeout: 3000,  // 3 second timeout
+});
+```
+
+When a timeout occurs, the request is aborted and you'll receive an error.
+
+<Note>
+  Timeout is measured from when the request starts, not from when it's queued.
+</Note>
+
+## Manual Abort Control
+
+You can also use your own `AbortController`:
+
+```typescript
+const controller = new AbortController();
+
+// Start the request
+const fetchPromise = betterFetch("/api/data", {
+  signal: controller.signal,
+});
+
+// Cancel after 2 seconds
+setTimeout(() => controller.abort(), 2000);
+
+try {
+  const { data } = await fetchPromise;
+} catch (error) {
+  console.log("Request was aborted");
+}
+```
+
+<Warning>
+  If you provide both `timeout` and `signal`, the `signal` takes precedence and the timeout will not be applied.
+</Warning>
+
+## Retry
+
+### Simple Retry
+
+Retry failed requests a specific number of times:
+
+```typescript
+const { data, error } = await betterFetch("/api/unstable", {
+  retry: 3,  // Retry up to 3 times
+});
+
+// Will attempt the request up to 4 times total (1 initial + 3 retries)
+```
+
+By default, retries use a 1-second delay between attempts.
+
+### Linear Retry Strategy
+
+Retry with a fixed delay between attempts:
+
+```typescript
+const { data } = await betterFetch("/api/unstable", {
+  retry: {
+    type: "linear",
+    attempts: 3,      // Number of retry attempts
+    delay: 1000,      // Wait 1 second between retries
+  },
+});
+```
+
+**Linear retry timeline:**
+- Attempt 1: Immediate
+- Attempt 2: After 1s delay
+- Attempt 3: After 1s delay
+- Attempt 4: After 1s delay
+
+### Exponential Backoff Strategy
+
+Retry with exponentially increasing delays:
+
+```typescript
+const { data } = await betterFetch("/api/unstable", {
+  retry: {
+    type: "exponential",
+    attempts: 4,        // Number of retry attempts
+    baseDelay: 100,     // Starting delay in ms
+    maxDelay: 10000,    // Maximum delay in ms
+  },
+});
+```
+
+**Exponential backoff timeline:**
+- Attempt 1: Immediate
+- Attempt 2: After 100ms (baseDelay)
+- Attempt 3: After 200ms (baseDelay * 2^1)
+- Attempt 4: After 400ms (baseDelay * 2^2)
+- Attempt 5: After 800ms (baseDelay * 2^3)
+
+The delay is capped at `maxDelay` to prevent extremely long waits.
+
+<Tip>
+  Exponential backoff is recommended for production APIs as it reduces load on struggling servers.
+</Tip>
+
+## Custom Retry Conditions
+
+Control when retries should happen with the `shouldRetry` function:
+
+```typescript
+const { data } = await betterFetch("/api/data", {
+  retry: {
+    type: "linear",
+    attempts: 3,
+    delay: 1000,
+    shouldRetry: (response) => {
+      // Only retry on 5xx server errors
+      return response?.status >= 500 && response?.status < 600;
+    },
+  },
+});
+```
+
+### Retry on Specific Status Codes
+
+```typescript
+await betterFetch("/api/data", {
+  retry: {
+    type: "exponential",
+    attempts: 3,
+    baseDelay: 200,
+    maxDelay: 5000,
+    shouldRetry: (response) => {
+      // Retry on rate limit or server error
+      return response?.status === 429 || response?.status === 503;
+    },
+  },
+});
+```
+
+### Async Retry Conditions
+
+```typescript
+await betterFetch("/api/data", {
+  retry: {
+    type: "linear",
+    attempts: 3,
+    delay: 1000,
+    shouldRetry: async (response) => {
+      // Check if service is healthy before retrying
+      const isHealthy = await checkServiceHealth();
+      return isHealthy && response?.status >= 500;
+    },
+  },
+});
+```
+
+## Retry Types
+
+Here are the TypeScript types for retry options:
+
+### RetryOptions Type
+
+```typescript
+type RetryOptions = number | LinearRetry | ExponentialRetry;
+```
+
+### LinearRetry Type
+
+```typescript
+type LinearRetry = {
+  type: "linear";
+  attempts: number;
+  delay: number;              // Delay in milliseconds
+  shouldRetry?: RetryCondition;
+};
+```
+
+### ExponentialRetry Type
+
+```typescript
+type ExponentialRetry = {
+  type: "exponential";
+  attempts: number;
+  baseDelay: number;          // Initial delay in milliseconds
+  maxDelay: number;           // Maximum delay in milliseconds
+  shouldRetry?: RetryCondition;
+};
+```
+
+### RetryCondition Type
+
+```typescript
+type RetryCondition = (
+  response: Response | null
+) => boolean | Promise<boolean>;
+```
+
+## Combining Timeout and Retry
+
+Use both timeout and retry together:
+
+```typescript
+const { data, error } = await betterFetch("/api/unstable", {
+  timeout: 5000,     // 5 second timeout per attempt
+  retry: {
+    type: "exponential",
+    attempts: 3,
+    baseDelay: 500,
+    maxDelay: 5000,
+  },
+});
+```
+
+Each retry attempt gets its own 5-second timeout.
+
+<Warning>
+  Be careful with the combination of timeout and retry - the total time could be `timeout * (attempts + 1)` plus retry delays.
+</Warning>
+
+## Retry with Hooks
+
+Track retry attempts using the `onRetry` hook:
+
+```typescript
+let retryCount = 0;
+
+const { data } = await betterFetch("/api/unstable", {
+  retry: {
+    type: "linear",
+    attempts: 3,
+    delay: 1000,
+  },
+  onRetry: (context) => {
+    retryCount++;
+    console.log(`Retry attempt ${retryCount}`);
+    console.log(`Previous status: ${context.response.status}`);
+  },
+  onError: (context) => {
+    console.log(`Failed after ${retryCount + 1} attempts`);
+  },
+});
+```
+
+### Advanced Retry Tracking
+
+```typescript
+const retryInfo = {
+  attempts: 0,
+  errors: [],
+};
+
+const { data } = await betterFetch("/api/data", {
+  retry: {
+    type: "exponential",
+    attempts: 5,
+    baseDelay: 100,
+    maxDelay: 10000,
+  },
+  onRetry: (context) => {
+    retryInfo.attempts++;
+    retryInfo.errors.push({
+      status: context.response.status,
+      timestamp: Date.now(),
+    });
+    console.log(`Retry ${retryInfo.attempts}: Status ${context.response.status}`);
+  },
+  onSuccess: () => {
+    if (retryInfo.attempts > 0) {
+      console.log(`Succeeded after ${retryInfo.attempts} retries`);
+    }
+  },
+});
+```
+
+## Retry Attempt Tracking
+
+Better Fetch internally tracks the retry attempt number:
+
+```typescript
+// The retryAttempt is automatically managed
+const { data } = await betterFetch("/api/data", {
+  retry: 3,
+  onRequest: (context) => {
+    // Access current retry attempt (starts at 0)
+    console.log(`Attempt: ${(context.retryAttempt || 0) + 1}`);
+  },
+});
+```
+
+<Note>
+  You don't need to manually set `retryAttempt` - it's managed automatically by Better Fetch.
+</Note>
+
+## Using with createFetch
+
+Set default timeout and retry for all requests:
+
+```typescript
+import { createFetch } from "@better-fetch/fetch";
+
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  timeout: 10000,
+  retry: {
+    type: "exponential",
+    attempts: 3,
+    baseDelay: 200,
+    maxDelay: 5000,
+  },
+});
+
+// All requests use these defaults
+const { data } = await $fetch("/user");
+
+// Override for specific request
+const { data: adminData } = await $fetch("/admin", {
+  timeout: 30000,  // Longer timeout for admin endpoints
+  retry: 5,        // More retries for critical requests
+});
+```
+
+## Abort with Retry
+
+Using `AbortController` with retry:
+
+```typescript
+const controller = new AbortController();
+
+const fetchPromise = betterFetch("/api/data", {
+  signal: controller.signal,
+  retry: 3,
+});
+
+// Abort will stop retries too
+controller.abort();
+
+try {
+  await fetchPromise;
+} catch (error) {
+  console.log("Aborted");
+}
+```
+
+<Warning>
+  Aborting a request with `AbortController` will immediately cancel it and prevent any retry attempts.
+</Warning>
+
+## Best Practices
+
+<Steps>
+
+### Use appropriate timeouts
+
+Set timeouts based on your API's expected response time. Too short causes unnecessary failures, too long wastes resources.
+
+### Choose the right retry strategy
+
+- Use **linear** for predictable, fast-failing APIs
+- Use **exponential** for production APIs under variable load
+
+### Implement shouldRetry
+
+Only retry on transient failures (5xx errors, network issues), not client errors (4xx).
+
+### Monitor retry metrics
+
+Use hooks to track retry rates and identify problematic endpoints.
+
+### Set maximum delays
+
+Always set a `maxDelay` for exponential backoff to prevent excessive wait times.
+
+</Steps>
+
+## Real-World Example
+
+```typescript
+import { createFetch } from "@better-fetch/fetch";
+
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  timeout: 15000,
+  retry: {
+    type: "exponential",
+    attempts: 4,
+    baseDelay: 300,
+    maxDelay: 10000,
+    shouldRetry: (response) => {
+      // Retry on rate limits and server errors
+      if (!response) return true;  // Network error
+      return response.status === 429 || response.status >= 500;
+    },
+  },
+  onRetry: (context) => {
+    console.warn(`Retrying request to ${context.request.url}`);
+  },
+  onError: (context) => {
+    if (context.error.status >= 500) {
+      // Alert ops team about server errors
+      alertOpsTeam(context);
+    }
+  },
+});
+
+export default $fetch;
+```

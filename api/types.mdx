@@ -1,0 +1,599 @@
+---
+title: "Types"
+description: "Type definitions for Better Fetch"
+---
+
+## Core Types
+
+### BetterFetchOption
+
+The main options type for configuring requests.
+
+```typescript
+type BetterFetchOption<
+  Body = any,
+  Query extends Record<string, any> = any,
+  Params extends Record<string, any> | Array<string> | undefined = any,
+  Res = any,
+  ExtraOptions extends Record<string, any> = {},
+  Headers extends Record<string, string> = {},
+> = ExtraOptions &
+  Omit<RequestInit, "body" | "headers"> &
+  FetchHooks<Res> & {
+    // Request Configuration
+    timeout?: number
+    customFetchImpl?: FetchEsque
+    plugins?: BetterFetchPlugin[]
+    baseURL?: string
+    throw?: boolean
+    
+    // Authentication
+    auth?: Auth
+    
+    // Request Data
+    headers?: CustomHeaders<Headers> | Headers
+    body?: Body
+    query?: Query
+    params?: Params
+    method?: StringLiteralUnion<PayloadMethod | NonPayloadMethod>
+    
+    // Advanced Options
+    duplex?: "full" | "half"
+    jsonParser?: (text: string) => Promise<any> | any
+    
+    // Retry Configuration
+    retry?: RetryOptions
+    retryAttempt?: number
+    
+    // Schema Validation
+    output?: StandardSchemaV1 | typeof Blob | typeof File
+    errorSchema?: StandardSchemaV1
+    disableValidation?: boolean
+    
+    // Abort Control
+    signal?: AbortSignal | null
+  }
+```
+
+#### Type Parameters
+
+<ParamField type="generic" name="Body" default="any">
+  Type of the request body.
+</ParamField>
+
+<ParamField type="generic" name="Query" default="any">
+  Type of query parameters as a record.
+</ParamField>
+
+<ParamField type="generic" name="Params" default="any">
+  Type of path parameters as a record or array.
+</ParamField>
+
+<ParamField type="generic" name="Res" default="any">
+  Expected response type.
+</ParamField>
+
+<ParamField type="generic" name="ExtraOptions" default="{}">
+  Additional options added by plugins.
+</ParamField>
+
+<ParamField type="generic" name="Headers" default="{}">
+  Custom header types.
+</ParamField>
+
+#### Properties
+
+<Expandable title="Request Configuration">
+  <ParamField path="timeout" type="number">
+    Request timeout in milliseconds. Aborts the request if it takes longer.
+  </ParamField>
+
+  <ParamField path="customFetchImpl" type="FetchEsque">
+    Custom fetch implementation. Useful for polyfills or mocking.
+  </ParamField>
+
+  <ParamField path="plugins" type="BetterFetchPlugin[]">
+    Array of plugins to extend functionality.
+  </ParamField>
+
+  <ParamField path="baseURL" type="string">
+    Base URL prepended to the request URL.
+  </ParamField>
+
+  <ParamField path="throw" type="boolean" default="false">
+    When `true`, throws errors instead of returning them as values.
+  </ParamField>
+</Expandable>
+
+<Expandable title="Authentication">
+  <ParamField path="auth" type="Auth">
+    Authentication configuration. See [Auth](#auth) type.
+  </ParamField>
+</Expandable>
+
+<Expandable title="Request Data">
+  <ParamField path="headers" type="CustomHeaders | Headers">
+    Request headers. Supports both object and Headers API.
+  </ParamField>
+
+  <ParamField path="body" type="Body">
+    Request body. Automatically serialized based on content-type.
+  </ParamField>
+
+  <ParamField path="query" type="Query">
+    Query parameters appended to URL.
+  </ParamField>
+
+  <ParamField path="params" type="Params">
+    Path parameters for dynamic URLs like `/users/:id`.
+  </ParamField>
+
+  <ParamField path="method" type="string">
+    HTTP method. Supports: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS.
+  </ParamField>
+</Expandable>
+
+<Expandable title="Advanced Options">
+  <ParamField path="duplex" type="'full' | 'half'">
+    Duplex mode for streaming requests.
+  </ParamField>
+
+  <ParamField path="jsonParser" type="(text: string) => Promise<any> | any">
+    Custom JSON parser function.
+  </ParamField>
+</Expandable>
+
+<Expandable title="Retry Configuration">
+  <ParamField path="retry" type="RetryOptions">
+    Retry configuration. Can be a number or detailed retry strategy.
+  </ParamField>
+
+  <ParamField path="retryAttempt" type="number">
+    Current retry attempt count. Used internally.
+  </ParamField>
+</Expandable>
+
+<Expandable title="Schema Validation">
+  <ParamField path="output" type="StandardSchemaV1 | typeof Blob | typeof File">
+    Schema for validating response data. Supports Zod, Valibot, ArkType, etc.
+  </ParamField>
+
+  <ParamField path="errorSchema" type="StandardSchemaV1">
+    Schema for validating error responses.
+  </ParamField>
+
+  <ParamField path="disableValidation" type="boolean" default="false">
+    Disable schema validation for this request.
+  </ParamField>
+</Expandable>
+
+<Expandable title="Abort Control">
+  <ParamField path="signal" type="AbortSignal | null">
+    AbortSignal for cancelling requests.
+  </ParamField>
+</Expandable>
+
+### BetterFetchResponse
+
+The response type returned by `betterFetch`.
+
+```typescript
+type BetterFetchResponse<
+  T,
+  E extends Record<string, unknown> | unknown = unknown,
+  Throw extends boolean = false,
+> = Throw extends true ? T : Data<T> | Error<E>
+
+type Data<T> = { data: T; error: null }
+
+type Error<E> = {
+  data: null
+  error: (E extends Record<string, any> ? E : { message?: string }) & {
+    status: number
+    statusText: string
+  }
+}
+```
+
+#### Type Parameters
+
+<ParamField type="generic" name="T">
+  The success response data type.
+</ParamField>
+
+<ParamField type="generic" name="E" default="unknown">
+  The error response type.
+</ParamField>
+
+<ParamField type="generic" name="Throw" default="false">
+  Whether the fetch is in throw mode.
+</ParamField>
+
+#### Behavior
+
+**When `Throw` is `false` (default):**
+
+Returns a discriminated union:
+```typescript
+{ data: T; error: null } | { data: null; error: E & ErrorMetadata }
+```
+
+**When `Throw` is `true`:**
+
+Returns `T` directly and throws `BetterFetchError` on failure.
+
+#### Examples
+
+```typescript
+// Default mode
+const { data, error } = await betterFetch("/api/users")
+if (error) {
+  console.error(error.status, error.statusText)
+  return
+}
+console.log(data)
+
+// Throw mode
+try {
+  const data = await betterFetch("/api/users", { throw: true })
+  console.log(data)
+} catch (error) {
+  if (error instanceof BetterFetchError) {
+    console.error(error.status, error.statusText)
+  }
+}
+```
+
+### FetchEsque
+
+A type representing a fetch-compatible function.
+
+```typescript
+type FetchEsque = (
+  input: string | URL | globalThis.Request,
+  init?: RequestInit,
+) => Promise<Response>
+```
+
+Used for custom fetch implementations:
+
+```typescript
+import { betterFetch } from "better-fetch"
+import nodeFetch from "node-fetch"
+
+await betterFetch("/api/users", {
+  customFetchImpl: nodeFetch as FetchEsque,
+})
+```
+
+### Method
+
+HTTP method types.
+
+```typescript
+type PayloadMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+type NonPayloadMethod = "GET" | "HEAD" | "OPTIONS"
+type Method = PayloadMethod | NonPayloadMethod
+```
+
+### CustomHeaders
+
+Type-safe headers with common HTTP headers.
+
+```typescript
+type CustomHeaders<T extends Record<string, string> = {}> = {
+  accept?: StringLiteralUnion<
+    "application/json" | "text/plain" | "application/octet-stream"
+  >
+  "content-type"?: StringLiteralUnion<
+    | "application/json"
+    | "text/plain"
+    | "application/x-www-form-urlencoded"
+    | "multipart/form-data"
+    | "application/octet-stream"
+  >
+  authorization?: StringLiteralUnion<`Bearer ${string}` | `Basic ${string}`>
+} & T & Record<string, string | undefined>
+```
+
+Provides autocomplete for common headers while allowing custom ones:
+
+```typescript
+const headers: CustomHeaders = {
+  "content-type": "application/json", // Autocompleted
+  "x-custom-header": "value", // Allowed
+}
+```
+
+## Authentication Types
+
+### Auth
+
+Union of authentication types.
+
+```typescript
+type Auth = Bearer | Basic | Custom
+```
+
+### Bearer
+
+Bearer token authentication.
+
+```typescript
+type Bearer = {
+  type: "Bearer"
+  token: typeOrTypeReturning<string | undefined | Promise<string | undefined>>
+}
+
+type typeOrTypeReturning<T> = T | (() => T)
+```
+
+#### Example
+
+```typescript
+await betterFetch("/api/protected", {
+  auth: {
+    type: "Bearer",
+    token: "your-token",
+  },
+})
+
+// Or with dynamic token
+await betterFetch("/api/protected", {
+  auth: {
+    type: "Bearer",
+    token: async () => await getAccessToken(),
+  },
+})
+```
+
+### Basic
+
+Basic authentication.
+
+```typescript
+type Basic = {
+  type: "Basic"
+  username: typeOrTypeReturning<string | undefined>
+  password: typeOrTypeReturning<string | undefined>
+}
+```
+
+#### Example
+
+```typescript
+await betterFetch("/api/protected", {
+  auth: {
+    type: "Basic",
+    username: "user",
+    password: "pass",
+  },
+})
+```
+
+### Custom
+
+Custom authentication header.
+
+```typescript
+type Custom = {
+  type: "Custom"
+  prefix: typeOrTypeReturning<string | undefined>
+  value: typeOrTypeReturning<string | undefined>
+}
+```
+
+#### Example
+
+```typescript
+await betterFetch("/api/protected", {
+  auth: {
+    type: "Custom",
+    prefix: "Token",
+    value: "api-key-123",
+  },
+})
+// Results in: Authorization: Token api-key-123
+```
+
+## Retry Types
+
+### RetryOptions
+
+```typescript
+type RetryOptions = LinearRetry | ExponentialRetry | number
+```
+
+Can be:
+- A number (retry attempts with default settings)
+- A `LinearRetry` configuration
+- An `ExponentialRetry` configuration
+
+### LinearRetry
+
+Fixed delay between retries.
+
+```typescript
+type LinearRetry = {
+  type: "linear"
+  attempts: number
+  delay: number
+  shouldRetry?: RetryCondition
+}
+
+type RetryCondition = (
+  response: Response | null,
+) => boolean | Promise<boolean>
+```
+
+#### Example
+
+```typescript
+await betterFetch("/api/users", {
+  retry: {
+    type: "linear",
+    attempts: 3,
+    delay: 1000, // 1 second between retries
+    shouldRetry: (response) => response?.status === 429,
+  },
+})
+```
+
+### ExponentialRetry
+
+Exponentially increasing delay between retries.
+
+```typescript
+type ExponentialRetry = {
+  type: "exponential"
+  attempts: number
+  baseDelay: number
+  maxDelay: number
+  shouldRetry?: RetryCondition
+}
+```
+
+#### Example
+
+```typescript
+await betterFetch("/api/users", {
+  retry: {
+    type: "exponential",
+    attempts: 3,
+    baseDelay: 1000, // Start with 1 second
+    maxDelay: 10000, // Cap at 10 seconds
+    shouldRetry: (response) => {
+      return response?.status === 429 || (response?.status ?? 0) >= 500
+    },
+  },
+})
+// Retries with delays: 1s, 2s, 4s (capped at maxDelay)
+```
+
+## Schema Types
+
+### Schema
+
+API schema definition.
+
+```typescript
+type Schema = {
+  schema: FetchSchemaRoutes
+  config: SchemaConfig
+}
+
+type FetchSchemaRoutes = {
+  [key in RouteKey]?: FetchSchema
+}
+
+type RouteKey = StringLiteralUnion<`@${Methods}/`>
+type Methods = "get" | "post" | "put" | "patch" | "delete"
+```
+
+### FetchSchema
+
+Schema for a single route.
+
+```typescript
+type FetchSchema = {
+  input?: StandardSchemaV1
+  output?: StandardSchemaV1
+  query?: StandardSchemaV1
+  params?: StandardSchemaV1<Record<string, unknown>> | undefined
+  method?: Methods
+  headers?: StandardSchemaV1<Record<string, unknown>>
+}
+```
+
+#### Properties
+
+<ParamField path="input" type="StandardSchemaV1">
+  Schema for validating request body.
+</ParamField>
+
+<ParamField path="output" type="StandardSchemaV1">
+  Schema for validating response data.
+</ParamField>
+
+<ParamField path="query" type="StandardSchemaV1">
+  Schema for validating query parameters.
+</ParamField>
+
+<ParamField path="params" type="StandardSchemaV1">
+  Schema for validating path parameters.
+</ParamField>
+
+<ParamField path="method" type="Methods">
+  HTTP method for the route.
+</ParamField>
+
+<ParamField path="headers" type="StandardSchemaV1">
+  Schema for validating request headers.
+</ParamField>
+
+### SchemaConfig
+
+Configuration for schema.
+
+```typescript
+type SchemaConfig = {
+  strict?: boolean
+  prefix?: "" | (string & Record<never, never>)
+  baseURL?: "" | (string & Record<never, never>)
+}
+```
+
+<ParamField path="strict" type="boolean" default="false">
+  When `true`, only allows URLs defined in the schema.
+</ParamField>
+
+<ParamField path="prefix" type="string">
+  Prefix prepended when calling schema routes.
+</ParamField>
+
+<ParamField path="baseURL" type="string">
+  Base URL for the schema routes.
+</ParamField>
+
+## Utility Types
+
+### StringLiteralUnion
+
+Provides autocomplete for string literals while allowing any string.
+
+```typescript
+type StringLiteralUnion<T extends string> = T | (string & {})
+```
+
+### Prettify
+
+Flattens intersection types for better IDE display.
+
+```typescript
+type Prettify<T> = {
+  [K in keyof T]: T[K]
+} & {}
+```
+
+### StandardSchemaV1
+
+Interface for schema validation libraries.
+
+```typescript
+interface StandardSchemaV1 {
+  "~standard": {
+    version: 1
+    vendor: string
+    validate: (value: unknown) => Result
+  }
+}
+```
+
+Supports: Zod, Valibot, ArkType, Yup, and other Standard Schema compatible libraries.
+
+## See Also
+
+- [betterFetch](/api/better-fetch) - Core fetch function
+- [createFetch](/api/create-fetch) - Create configured instance
+- [Plugins](/api/plugins) - Plugin type definitions
+- [Error](/api/error) - Error type

@@ -1,0 +1,454 @@
+---
+title: "createFetch"
+description: "Create custom fetch instances with pre-configured options, schemas, and plugins"
+---
+
+## Overview
+
+`createFetch` allows you to create custom fetch instances with pre-configured options that apply to all requests. This is ideal for setting up API clients with consistent base URLs, headers, authentication, and type-safe schemas.
+
+## Basic Usage
+
+```typescript
+import { createFetch } from "better-fetch";
+
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+// All requests now use the base URL
+const { data, error } = await $fetch("/users");
+// Makes request to: https://api.example.com/users
+```
+
+## Configuration Options
+
+### CreateFetchOption Type
+
+The `createFetch` function accepts a `CreateFetchOption` object with the following properties:
+
+```typescript
+type CreateFetchOption = BetterFetchOption & {
+  schema?: Schema;
+  catchAllError?: boolean;
+  defaultOutput?: StandardSchemaV1;
+  defaultError?: StandardSchemaV1;
+};
+```
+
+### baseURL
+
+Set a base URL that will be prepended to all request paths:
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com/v1",
+});
+
+await $fetch("/users"); // → https://api.example.com/v1/users
+```
+
+You can override the base URL per request:
+
+```typescript
+await $fetch("/path", {
+  baseURL: "https://api.example.com/v2",
+});
+```
+
+### headers
+
+Define default headers that will be included in all requests:
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  headers: {
+    "Content-Type": "application/json",
+    "X-Api-Version": "v1",
+  },
+});
+```
+
+Headers are merged with request-level headers, with request headers taking precedence:
+
+```typescript
+await $fetch("/users", {
+  headers: {
+    "Authorization": "Bearer token",
+    // Merges with default headers
+  },
+});
+```
+
+### auth
+
+Configure authentication that applies to all requests:
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  auth: {
+    type: "Bearer",
+    token: "your-auth-token",
+  },
+});
+```
+
+### plugins
+
+Add plugins that will be applied to all requests:
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  plugins: [loggingPlugin, authPlugin],
+});
+```
+
+Learn more about plugins in the [Plugins](/advanced/plugins) and [Custom Plugins](/advanced/custom-plugins) documentation.
+
+### catchAllError
+
+Catch all errors including non-API errors like schema validation failures. When set to `true`, the function returns an error object instead of throwing:
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  catchAllError: true,
+});
+
+const { data, error } = await $fetch("/users");
+// Will never throw - always returns { data, error }
+```
+
+<Note>
+When `catchAllError` is enabled, even network errors, timeout errors, and validation errors are returned as error objects with `status: 500` and a descriptive message.
+</Note>
+
+### throw
+
+Control whether errors should throw exceptions:
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  throw: true,
+});
+
+try {
+  const data = await $fetch("/users"); // Throws on error
+} catch (error) {
+  console.error(error);
+}
+```
+
+### timeout
+
+Set a default timeout (in milliseconds) for all requests:
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  timeout: 5000, // 5 seconds
+});
+```
+
+### customFetchImpl
+
+Use a custom fetch implementation:
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  customFetchImpl: async (url, init) => {
+    // Custom fetch logic
+    return fetch(url, init);
+  },
+});
+```
+
+### retry
+
+Configure retry behavior for failed requests:
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  retry: {
+    attempts: 3,
+    delay: 1000,
+  },
+});
+```
+
+## Schema Configuration
+
+Define type-safe API schemas at the instance level:
+
+```typescript
+import { createFetch, createSchema } from "better-fetch";
+import { z } from "zod";
+
+const schema = {
+  "/users": {
+    output: z.object({
+      id: z.number(),
+      name: z.string(),
+    }),
+  },
+  "/users/:id": {
+    params: z.object({
+      id: z.string(),
+    }),
+    output: z.object({
+      id: z.number(),
+      name: z.string(),
+      email: z.string(),
+    }),
+  },
+  "/users/create": {
+    method: "post",
+    input: z.object({
+      name: z.string(),
+      email: z.string(),
+    }),
+    output: z.object({
+      id: z.number(),
+      name: z.string(),
+      email: z.string(),
+    }),
+  },
+} satisfies FetchSchemaRoutes;
+
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  schema: createSchema(schema),
+});
+
+// Fully typed requests
+const { data } = await $fetch("/users");
+// data is typed as: { id: number; name: string; }[]
+
+const { data: user } = await $fetch("/users/:id", {
+  params: { id: "123" },
+});
+// user is typed as: { id: number; name: string; email: string; }
+```
+
+### Schema Config Options
+
+Configure schema behavior with `createSchema`:
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  schema: createSchema(schema, {
+    strict: true, // Only allow defined routes
+    baseURL: "https://api.example.com", // Schema base URL
+    prefix: "/api", // URL prefix for schema routes
+  }),
+});
+```
+
+<Steps>
+  <Step title="strict">
+    When `true`, only routes defined in the schema are allowed. TypeScript will error on undefined routes.
+  </Step>
+  <Step title="baseURL">
+    Base URL for the schema routes. Used for URL transformation.
+  </Step>
+  <Step title="prefix">
+    Prefix prepended to schema routes. Can be transformed to baseURL in plugins.
+  </Step>
+</Steps>
+
+### Default Output and Error Schemas
+
+Define default schemas for responses and errors:
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  defaultOutput: z.object({
+    data: z.unknown(),
+  }),
+  defaultError: z.object({
+    error: z.string(),
+    code: z.string(),
+  }),
+});
+
+// Response is typed with default schemas
+const result = await $fetch("/users");
+// result type: { data: { data: unknown } } | { error: { error: string, code: string, status: number, statusText: string } }
+```
+
+## BetterFetch Type
+
+The return type of `createFetch` is `BetterFetch<Option>`, which provides full type inference based on your configuration:
+
+```typescript
+import type { BetterFetch, CreateFetchOption } from "better-fetch";
+
+type MyFetch = BetterFetch<{
+  baseURL: "https://api.example.com";
+  schema: typeof mySchema;
+  defaultOutput: typeof defaultOutputSchema;
+}>;
+```
+
+The `BetterFetch` type:
+- Infers allowed URLs from your schema
+- Requires options (body, query, params) based on schema definitions
+- Infers response types from schema output
+- Merges plugin schemas and options
+- Handles strict mode type checking
+
+## Use Cases
+
+### API Client
+
+Create a dedicated API client for your backend:
+
+```typescript
+import { createFetch, createSchema } from "better-fetch";
+
+const api = createFetch({
+  baseURL: process.env.API_URL,
+  headers: {
+    "Content-Type": "application/json",
+  },
+  timeout: 10000,
+  retry: {
+    attempts: 3,
+  },
+});
+
+export default api;
+```
+
+### Authenticated Client
+
+Create a client with authentication:
+
+```typescript
+const authenticatedApi = createFetch({
+  baseURL: "https://api.example.com",
+  headers: {
+    "Authorization": `Bearer ${getToken()}`,
+  },
+});
+```
+
+### Multiple Environments
+
+Create different clients for different environments:
+
+```typescript
+const devApi = createFetch({
+  baseURL: "http://localhost:3000",
+  timeout: 5000,
+});
+
+const prodApi = createFetch({
+  baseURL: "https://api.production.com",
+  timeout: 10000,
+  retry: { attempts: 3 },
+});
+
+export const api = process.env.NODE_ENV === "production" ? prodApi : devApi;
+```
+
+### Type-Safe Client
+
+Create a fully type-safe API client:
+
+```typescript
+import { createFetch, createSchema } from "better-fetch";
+import { apiSchema } from "./schema";
+
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  schema: createSchema(apiSchema, {
+    strict: true, // Only allow defined routes
+  }),
+});
+
+// TypeScript enforces correct usage
+await $fetch("/users"); // ✓ OK
+await $fetch("/unknown"); // ✗ Type error: not in schema
+```
+
+## Advanced Examples
+
+### Custom Error Handling
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  catchAllError: true,
+  onError: async (context) => {
+    if (context.error.status === 401) {
+      // Handle unauthorized
+      await refreshToken();
+    }
+  },
+});
+```
+
+### Request/Response Hooks
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  onRequest: async (context) => {
+    console.log("Request:", context.url);
+  },
+  onResponse: async (context) => {
+    console.log("Response:", context.response.status);
+  },
+  onSuccess: async (context) => {
+    console.log("Success:", context.data);
+  },
+});
+```
+
+### Combining Options
+
+```typescript
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  timeout: 5000,
+  retry: {
+    attempts: 3,
+    delay: 1000,
+  },
+  plugins: [loggingPlugin, metricsPlugin],
+  schema: createSchema(apiSchema),
+  catchAllError: true,
+});
+```
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Plugins" icon="puzzle-piece" href="/advanced/plugins">
+    Learn about the plugin system
+  </Card>
+  <Card title="Custom Plugins" icon="code" href="/advanced/custom-plugins">
+    Create your own plugins
+  </Card>
+  <Card title="Type Safety" icon="shield" href="/core/type-safety">
+    Type-safe API calls with schemas
+  </Card>
+  <Card title="Error Handling" icon="circle-exclamation" href="/core/error-handling">
+    Handle errors effectively
+  </Card>
+</CardGroup>

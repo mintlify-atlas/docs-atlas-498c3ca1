@@ -1,0 +1,391 @@
+---
+title: Basic Usage
+description: Learn the fundamentals of using Better Fetch for HTTP requests
+---
+
+## Overview
+
+Better Fetch provides a simple, powerful interface for making HTTP requests. It automatically handles request formatting, response parsing, and returns errors as values by default.
+
+## Making Your First Request
+
+The simplest way to use Better Fetch is to import `betterFetch` and call it with a URL:
+
+```typescript
+import { betterFetch } from "@better-fetch/fetch";
+
+const { data, error } = await betterFetch("https://api.example.com/users");
+
+if (error) {
+  console.error("Request failed:", error);
+} else {
+  console.log("Users:", data);
+}
+```
+
+<Note>
+Better Fetch returns errors as values in a `{ data, error }` pattern by default. This makes error handling explicit and type-safe.
+</Note>
+
+## HTTP Methods
+
+Better Fetch automatically detects the HTTP method based on the presence of a request body:
+
+<Steps>
+  <Step title="GET Requests">
+    Requests without a body default to GET:
+    
+    ```typescript
+    const { data } = await betterFetch("https://api.example.com/users");
+    ```
+  </Step>
+  
+  <Step title="POST Requests">
+    Requests with a body default to POST:
+    
+    ```typescript
+    const { data } = await betterFetch("https://api.example.com/users", {
+      body: { name: "John Doe", email: "john@example.com" }
+    });
+    ```
+  </Step>
+  
+  <Step title="Explicit Methods">
+    You can also explicitly specify the HTTP method:
+    
+    ```typescript
+    const { data } = await betterFetch("https://api.example.com/users/123", {
+      method: "PUT",
+      body: { name: "Jane Doe" }
+    });
+    
+    const { data: deleted } = await betterFetch("https://api.example.com/users/123", {
+      method: "DELETE"
+    });
+    ```
+  </Step>
+  
+  <Step title="Method Modifiers">
+    Better Fetch supports method modifiers in the URL with the `@` prefix:
+    
+    ```typescript
+    // Equivalent to { method: "POST" }
+    const { data } = await betterFetch("@post/api/users", {
+      baseURL: "https://api.example.com"
+    });
+    ```
+  </Step>
+</Steps>
+
+## Request Body
+
+Better Fetch automatically serializes request bodies based on the content type:
+
+### JSON Bodies (Default)
+
+Objects and arrays are automatically serialized as JSON:
+
+```typescript
+const { data } = await betterFetch("https://api.example.com/users", {
+  method: "POST",
+  body: { 
+    name: "John Doe", 
+    age: 30,
+    tags: ["developer", "typescript"]
+  }
+});
+// Content-Type: application/json (automatic)
+// Body: {"name":"John Doe","age":30,"tags":["developer","typescript"]}
+```
+
+### Form Data
+
+Use `URLSearchParams` or set the content type for form-encoded data:
+
+```typescript
+const { data } = await betterFetch("https://api.example.com/login", {
+  method: "POST",
+  body: new URLSearchParams({ username: "user", password: "pass" })
+});
+
+// Or with explicit content type:
+const { data: result } = await betterFetch("https://api.example.com/form", {
+  method: "POST",
+  body: { name: "John Doe", age: 30 },
+  headers: {
+    "Content-Type": "application/x-www-form-urlencoded"
+  }
+});
+```
+
+### Plain Text
+
+Send plain text by setting the appropriate content type:
+
+```typescript
+const { data } = await betterFetch("https://api.example.com/note", {
+  method: "POST",
+  body: "This is a plain text message",
+  headers: {
+    "Content-Type": "text/plain"
+  }
+});
+```
+
+### Binary Data
+
+Send binary data using `Buffer`, `Blob`, or `File` objects:
+
+```typescript
+const buffer = Buffer.from("Hello World");
+const { data } = await betterFetch("https://api.example.com/upload", {
+  method: "POST",
+  body: buffer,
+  headers: {
+    "Content-Type": "application/octet-stream"
+  }
+});
+```
+
+## Headers
+
+Better Fetch provides type-safe header management with common header suggestions:
+
+```typescript
+const { data } = await betterFetch("https://api.example.com/data", {
+  headers: {
+    "accept": "application/json",
+    "content-type": "application/json",
+    "x-api-key": "your-api-key",
+    "x-custom-header": "custom-value"
+  }
+});
+```
+
+### Authorization Headers
+
+Use the `auth` option for automatic authorization header formatting:
+
+```typescript
+// Bearer token
+const { data } = await betterFetch("https://api.example.com/protected", {
+  auth: {
+    type: "Bearer",
+    token: "your-access-token"
+  }
+});
+// Sets: Authorization: Bearer your-access-token
+
+// Basic auth
+const { data: result } = await betterFetch("https://api.example.com/protected", {
+  auth: {
+    type: "Basic",
+    username: "user",
+    password: "pass"
+  }
+});
+// Sets: Authorization: Basic dXNlcjpwYXNz
+
+// Async token retrieval
+const { data: user } = await betterFetch("https://api.example.com/user", {
+  auth: {
+    type: "Bearer",
+    token: async () => await getAccessToken()
+  }
+});
+```
+
+## Query Parameters
+
+Add query parameters using the `query` option:
+
+```typescript
+const { data } = await betterFetch("https://api.example.com/search", {
+  query: {
+    q: "typescript",
+    page: 1,
+    limit: 10
+  }
+});
+// URL: https://api.example.com/search?q=typescript&page=1&limit=10
+```
+
+### Array Query Parameters
+
+Arrays are expanded into multiple parameters:
+
+```typescript
+const { data } = await betterFetch("https://api.example.com/users", {
+  query: {
+    role: ["admin", "user"]
+  }
+});
+// URL: https://api.example.com/users?role=admin&role=user
+```
+
+### Object Query Parameters
+
+Objects are automatically JSON-encoded:
+
+```typescript
+const { data } = await betterFetch("https://api.example.com/search", {
+  query: {
+    filter: { status: "active", verified: true }
+  }
+});
+// URL: https://api.example.com/search?filter=%7B%22status%22%3A%22active%22%2C%22verified%22%3Atrue%7D
+```
+
+<Note>
+Query parameters with `null` or `undefined` values are automatically excluded from the URL.
+</Note>
+
+## Dynamic URL Parameters
+
+Use the `params` option to replace path parameters:
+
+```typescript
+// Object-based params
+const { data } = await betterFetch("https://api.example.com/users/:id/posts/:postId", {
+  params: {
+    id: "123",
+    postId: "456"
+  }
+});
+// URL: https://api.example.com/users/123/posts/456
+
+// Array-based params (in order)
+const { data: user } = await betterFetch("https://api.example.com/users/:id", {
+  params: ["123"]
+});
+// URL: https://api.example.com/users/123
+```
+
+<Tip>
+Parameters are automatically URL-encoded, so you can safely use special characters.
+</Tip>
+
+## Base URL Configuration
+
+Use `baseURL` to avoid repeating the same host:
+
+```typescript
+const { data } = await betterFetch("/users", {
+  baseURL: "https://api.example.com"
+});
+// URL: https://api.example.com/users
+
+const { data: posts } = await betterFetch("/posts/123", {
+  baseURL: "https://api.example.com"
+});
+// URL: https://api.example.com/posts/123
+```
+
+### Creating a Configured Client
+
+For repeated requests to the same API, use `createFetch` to create a pre-configured client:
+
+```typescript
+import { createFetch } from "@better-fetch/fetch";
+
+const api = createFetch({
+  baseURL: "https://api.example.com",
+  headers: {
+    "x-api-key": "your-api-key"
+  }
+});
+
+// All requests inherit the base configuration
+const { data: users } = await api("/users");
+const { data: posts } = await api("/posts");
+```
+
+## Response Types
+
+Better Fetch automatically detects and parses responses based on the `Content-Type` header:
+
+### JSON Responses
+
+```typescript
+const { data } = await betterFetch("https://api.example.com/users/123");
+// Automatically parsed from JSON
+console.log(data.name); // TypeScript: any
+```
+
+### Text Responses
+
+```typescript
+const { data } = await betterFetch("https://api.example.com/readme.txt");
+// Returns plain text string
+console.log(data); // "This is the readme content..."
+```
+
+### Binary Responses
+
+```typescript
+const { data } = await betterFetch<Blob>("https://api.example.com/image.png");
+// Returns a Blob for binary content
+console.log(data.size);
+```
+
+### No Content Responses
+
+```typescript
+const { data } = await betterFetch("https://api.example.com/resource", {
+  method: "DELETE"
+});
+// 204 No Content returns empty string
+console.log(data); // ""
+
+const { data: head } = await betterFetch("https://api.example.com/check", {
+  method: "HEAD"
+});
+// HEAD requests return empty string
+console.log(head); // ""
+```
+
+## Request Timeout
+
+Set a timeout to abort long-running requests:
+
+```typescript
+const { data, error } = await betterFetch("https://api.example.com/slow", {
+  timeout: 5000 // 5 seconds
+});
+
+if (error) {
+  console.error("Request timed out or failed");
+}
+```
+
+## Abort Controller
+
+Manually control request cancellation:
+
+```typescript
+const controller = new AbortController();
+
+const request = betterFetch("https://api.example.com/data", {
+  signal: controller.signal
+});
+
+// Cancel the request after 3 seconds
+setTimeout(() => controller.abort(), 3000);
+
+try {
+  const { data } = await request;
+} catch (error) {
+  console.error("Request was aborted");
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Error Handling" icon="triangle-exclamation" href="./error-handling">
+    Learn how to handle errors effectively with Better Fetch
+  </Card>
+  <Card title="Type Safety" icon="shield-check" href="./type-safety">
+    Leverage TypeScript for type-safe API calls
+  </Card>
+</CardGroup>

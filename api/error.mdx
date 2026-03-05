@@ -1,0 +1,415 @@
+---
+title: "BetterFetchError"
+description: "Error class for Better Fetch exceptions"
+---
+
+## Overview
+
+`BetterFetchError` is a custom error class thrown by Better Fetch when a request fails and `throw: true` is set in options. It extends the native JavaScript `Error` class and provides additional context about the HTTP error.
+
+## Class Definition
+
+```typescript
+class BetterFetchError extends Error {
+  constructor(
+    public status: number,
+    public statusText: string,
+    public error: any,
+  )
+}
+```
+
+## Constructor
+
+<ParamField path="status" type="number" required>
+  The HTTP status code of the failed response.
+  
+  Examples:
+  - `400` - Bad Request
+  - `401` - Unauthorized
+  - `403` - Forbidden
+  - `404` - Not Found
+  - `500` - Internal Server Error
+  - `503` - Service Unavailable
+</ParamField>
+
+<ParamField path="statusText" type="string" required>
+  The HTTP status text corresponding to the status code.
+  
+  Examples:
+  - `"Bad Request"`
+  - `"Unauthorized"`
+  - `"Not Found"`
+  - `"Internal Server Error"`
+</ParamField>
+
+<ParamField path="error" type="any" required>
+  The parsed error response body. Can be:
+  - An object if the response was JSON
+  - A string if the response was text
+  - `null` if the response had no body
+  
+  This is also set as the error's `cause` property for better error chaining.
+</ParamField>
+
+## Properties
+
+<ResponseField name="status" type="number">
+  The HTTP status code.
+  
+  ```typescript
+  try {
+    await betterFetch("/api/users", { throw: true })
+  } catch (error) {
+    if (error instanceof BetterFetchError) {
+      console.log(error.status) // 404, 500, etc.
+    }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="statusText" type="string">
+  The HTTP status text.
+  
+  ```typescript
+  try {
+    await betterFetch("/api/users", { throw: true })
+  } catch (error) {
+    if (error instanceof BetterFetchError) {
+      console.log(error.statusText) // "Not Found", "Internal Server Error", etc.
+    }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="error" type="any">
+  The parsed error response body.
+  
+  ```typescript
+  try {
+    await betterFetch("/api/users", { throw: true })
+  } catch (error) {
+    if (error instanceof BetterFetchError) {
+      console.log(error.error) // { message: "User not found", code: "USER_NOT_FOUND" }
+    }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  The error message. Set to `statusText` or `status.toString()` if `statusText` is empty.
+  
+  Inherited from the `Error` class.
+</ResponseField>
+
+<ResponseField name="cause" type="any">
+  The error cause. Set to the `error` parameter.
+  
+  Inherited from the `Error` class for better error chaining.
+</ResponseField>
+
+<ResponseField name="stack" type="string">
+  The error stack trace.
+  
+  Inherited from the `Error` class. Properly captured using `Error.captureStackTrace`.
+</ResponseField>
+
+## Usage
+
+### When Errors Are Thrown
+
+Errors are only thrown when `throw: true` is set:
+
+```typescript
+import { betterFetch, BetterFetchError } from "better-fetch"
+
+try {
+  const data = await betterFetch("/api/users", {
+    throw: true, // Enable throw mode
+  })
+  console.log(data)
+} catch (error) {
+  if (error instanceof BetterFetchError) {
+    console.error(`HTTP ${error.status}: ${error.statusText}`)
+    console.error("Error details:", error.error)
+  }
+}
+```
+
+### Default Behavior (No Throw)
+
+By default, errors are returned as values:
+
+```typescript
+const { data, error } = await betterFetch("/api/users")
+
+if (error) {
+  // error has the same shape as BetterFetchError properties
+  console.error(`HTTP ${error.status}: ${error.statusText}`)
+  console.error("Error details:", error)
+} else {
+  console.log(data)
+}
+```
+
+## Examples
+
+### Basic Error Handling
+
+```typescript
+import { betterFetch, BetterFetchError } from "better-fetch"
+
+try {
+  const user = await betterFetch("/api/users/999", {
+    throw: true,
+  })
+  console.log(user)
+} catch (error) {
+  if (error instanceof BetterFetchError) {
+    if (error.status === 404) {
+      console.log("User not found")
+    } else if (error.status >= 500) {
+      console.log("Server error")
+    }
+  }
+}
+```
+
+### Typed Error Responses
+
+```typescript
+import { z } from "zod"
+
+const errorSchema = z.object({
+  message: z.string(),
+  code: z.string(),
+  details: z.record(z.any()).optional(),
+})
+
+type APIError = z.infer<typeof errorSchema>
+
+try {
+  const user = await betterFetch("/api/users", {
+    throw: true,
+    errorSchema,
+  })
+} catch (error) {
+  if (error instanceof BetterFetchError) {
+    const apiError = error.error as APIError
+    console.error(`Error ${apiError.code}: ${apiError.message}`)
+    if (apiError.details) {
+      console.error("Details:", apiError.details)
+    }
+  }
+}
+```
+
+### Handling Specific Status Codes
+
+```typescript
+try {
+  const data = await betterFetch("/api/users", {
+    throw: true,
+  })
+} catch (error) {
+  if (error instanceof BetterFetchError) {
+    switch (error.status) {
+      case 400:
+        console.error("Bad request:", error.error)
+        break
+      case 401:
+        console.error("Unauthorized - please log in")
+        // Redirect to login
+        break
+      case 403:
+        console.error("Forbidden - insufficient permissions")
+        break
+      case 404:
+        console.error("Resource not found")
+        break
+      case 429:
+        console.error("Rate limit exceeded")
+        break
+      case 500:
+      case 502:
+      case 503:
+        console.error("Server error - please try again later")
+        break
+      default:
+        console.error(`HTTP ${error.status}: ${error.statusText}`)
+    }
+  } else {
+    // Handle non-HTTP errors (network errors, etc.)
+    console.error("Network error:", error)
+  }
+}
+```
+
+### With Error Logging Service
+
+```typescript
+import { betterFetch, BetterFetchError } from "better-fetch"
+import * as Sentry from "@sentry/browser"
+
+try {
+  const data = await betterFetch("/api/users", {
+    throw: true,
+  })
+} catch (error) {
+  if (error instanceof BetterFetchError) {
+    Sentry.captureException(error, {
+      contexts: {
+        http: {
+          status_code: error.status,
+          status_text: error.statusText,
+        },
+      },
+      extra: {
+        error_body: error.error,
+      },
+    })
+  }
+  throw error
+}
+```
+
+### Retry Logic Based on Error
+
+```typescript
+async function fetchWithCustomRetry(url: string, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await betterFetch(url, { throw: true })
+    } catch (error) {
+      if (error instanceof BetterFetchError) {
+        // Retry on server errors or rate limiting
+        if (error.status >= 500 || error.status === 429) {
+          if (attempt < maxRetries - 1) {
+            const delay = Math.pow(2, attempt) * 1000
+            console.log(`Retrying in ${delay}ms...`)
+            await new Promise(resolve => setTimeout(resolve, delay))
+            continue
+          }
+        }
+      }
+      throw error
+    }
+  }
+}
+```
+
+### Custom Error Messages
+
+```typescript
+try {
+  const data = await betterFetch("/api/users", {
+    throw: true,
+  })
+} catch (error) {
+  if (error instanceof BetterFetchError) {
+    // Create user-friendly error messages
+    let userMessage = "An error occurred"
+    
+    if (error.status === 404) {
+      userMessage = "The requested resource was not found"
+    } else if (error.status >= 500) {
+      userMessage = "Our servers are experiencing issues. Please try again later."
+    } else if (error.status === 401) {
+      userMessage = "Please log in to continue"
+    } else if (error.error?.message) {
+      userMessage = error.error.message
+    }
+    
+    showErrorToast(userMessage)
+  }
+}
+```
+
+### Error Boundary Integration (React)
+
+```typescript
+import { Component, ReactNode } from "react"
+import { BetterFetchError } from "better-fetch"
+
+class ErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state = { error: null }
+
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+
+  render() {
+    if (this.state.error) {
+      if (this.state.error instanceof BetterFetchError) {
+        return (
+          <div>
+            <h1>HTTP Error {this.state.error.status}</h1>
+            <p>{this.state.error.statusText}</p>
+            <pre>{JSON.stringify(this.state.error.error, null, 2)}</pre>
+          </div>
+        )
+      }
+      return <div>An error occurred</div>
+    }
+    return this.props.children
+  }
+}
+```
+
+## Error Response Structure
+
+When using default mode (`throw: false`), the error structure mirrors `BetterFetchError` properties:
+
+```typescript
+const { data, error } = await betterFetch("/api/users")
+
+if (error) {
+  // error structure:
+  // {
+  //   status: number,
+  //   statusText: string,
+  //   ...parsed response body
+  // }
+  console.log(error.status)
+  console.log(error.statusText)
+  console.log(error.message) // From response body if JSON
+}
+```
+
+## Type Guards
+
+Use the `instanceof` operator to check if an error is a `BetterFetchError`:
+
+```typescript
+try {
+  await betterFetch("/api/users", { throw: true })
+} catch (error) {
+  if (error instanceof BetterFetchError) {
+    // TypeScript knows this is a BetterFetchError
+    console.log(error.status)
+    console.log(error.statusText)
+    console.log(error.error)
+  } else {
+    // Other error types (network errors, etc.)
+    console.error("Unknown error:", error)
+  }
+}
+```
+
+<Note>
+  The `error` property contains the parsed response body. If the response was JSON, it will be an object. If it was text or couldn't be parsed as JSON, it will be a string.
+</Note>
+
+<Warning>
+  Network errors (no connection, DNS failures, etc.) are not instances of `BetterFetchError`. They are native JavaScript errors and should be handled separately.
+</Warning>
+
+## See Also
+
+- [betterFetch](/api/better-fetch) - Core fetch function
+- [BetterFetchOption](/api/types#betterfetchoption) - Options including `throw`
+- [BetterFetchResponse](/api/types#betterfetchresponse) - Response type
+- [Error Handling Guide](/core/error-handling) - Comprehensive error handling patterns

@@ -1,0 +1,319 @@
+---
+title: Authorization
+description: Handle authentication with Bearer tokens, Basic auth, and custom schemes
+---
+
+Better Fetch provides built-in support for common authentication patterns, making it easy to add authorization headers to your requests.
+
+## Bearer Token Authentication
+
+The most common authentication method for modern APIs. Better Fetch automatically formats the Authorization header:
+
+```typescript
+import { betterFetch } from "@better-fetch/fetch";
+
+const { data } = await betterFetch("/api/protected", {
+  auth: {
+    type: "Bearer",
+    token: "your-access-token",
+  },
+});
+
+// Sends: Authorization: Bearer your-access-token
+```
+
+### Dynamic Token Resolution
+
+Tokens can be provided as functions, which is useful for accessing tokens from storage or state:
+
+```typescript
+const { data } = await betterFetch("/api/user", {
+  auth: {
+    type: "Bearer",
+    token: () => localStorage.getItem("accessToken"),
+  },
+});
+```
+
+### Async Token Resolution
+
+For async token retrieval (e.g., refreshing tokens):
+
+```typescript
+const { data } = await betterFetch("/api/user", {
+  auth: {
+    type: "Bearer",
+    token: async () => {
+      // Fetch token from async source
+      const token = await getAccessToken();
+      return token;
+    },
+  },
+});
+```
+
+<Note>
+  If the token resolves to `undefined` or `null`, the Authorization header will not be set.
+</Note>
+
+## Basic Authentication
+
+HTTP Basic authentication using username and password:
+
+```typescript
+const { data } = await betterFetch("/api/admin", {
+  auth: {
+    type: "Basic",
+    username: "admin",
+    password: "secret123",
+  },
+});
+
+// Sends: Authorization: Basic YWRtaW46c2VjcmV0MTIz
+```
+
+### Dynamic Credentials
+
+Like Bearer tokens, username and password can be functions:
+
+```typescript
+const { data } = await betterFetch("/api/admin", {
+  auth: {
+    type: "Basic",
+    username: () => getUsername(),
+    password: () => getPassword(),
+  },
+});
+```
+
+<Warning>
+  Basic authentication credentials are base64 encoded (not encrypted). Only use over HTTPS in production.
+</Warning>
+
+## Custom Authorization Schemes
+
+For custom authentication schemes beyond Bearer and Basic:
+
+```typescript
+const { data } = await betterFetch("/api/data", {
+  auth: {
+    type: "Custom",
+    prefix: "Token",
+    value: "your-custom-token",
+  },
+});
+
+// Sends: Authorization: Token your-custom-token
+```
+
+### Custom Scheme Examples
+
+#### API Key Authentication
+
+```typescript
+await betterFetch("/api/data", {
+  auth: {
+    type: "Custom",
+    prefix: "ApiKey",
+    value: "sk_live_abc123xyz",
+  },
+});
+
+// Sends: Authorization: ApiKey sk_live_abc123xyz
+```
+
+#### AWS Signature
+
+```typescript
+await betterFetch("/api/data", {
+  auth: {
+    type: "Custom",
+    prefix: "AWS4-HMAC-SHA256",
+    value: async () => {
+      const signature = await generateAWSSignature();
+      return signature;
+    },
+  },
+});
+```
+
+#### No Prefix
+
+```typescript
+// Omit prefix for custom header values
+await betterFetch("/api/data", {
+  auth: {
+    type: "Custom",
+    prefix: "",
+    value: "custom-auth-value",
+  },
+});
+
+// Sends: Authorization: custom-auth-value
+```
+
+## Auth Types
+
+Here are the TypeScript types for auth options:
+
+### Bearer Type
+
+```typescript
+type Bearer = {
+  type: "Bearer";
+  token: string | undefined | (() => string | undefined) | (() => Promise<string | undefined>);
+};
+```
+
+### Basic Type
+
+```typescript
+type Basic = {
+  type: "Basic";
+  username: string | undefined | (() => string | undefined);
+  password: string | undefined | (() => string | undefined);
+};
+```
+
+### Custom Type
+
+```typescript
+type Custom = {
+  type: "Custom";
+  prefix: string | undefined | (() => string | undefined);
+  value: string | undefined | (() => string | undefined);
+};
+```
+
+## Using with createFetch
+
+Set default authentication for all requests:
+
+```typescript
+import { createFetch } from "@better-fetch/fetch";
+
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+  auth: {
+    type: "Bearer",
+    token: () => localStorage.getItem("token"),
+  },
+});
+
+// All requests will include the Bearer token
+const { data } = await $fetch("/user");
+const { data: posts } = await $fetch("/posts");
+```
+
+### Override Per Request
+
+```typescript
+const $fetch = createFetch({
+  auth: {
+    type: "Bearer",
+    token: "default-token",
+  },
+});
+
+// Override for specific request
+const { data } = await $fetch("/admin", {
+  auth: {
+    type: "Basic",
+    username: "admin",
+    password: "admin123",
+  },
+});
+```
+
+## Combining with Headers
+
+You can combine auth with custom headers:
+
+```typescript
+const { data } = await betterFetch("/api/user", {
+  auth: {
+    type: "Bearer",
+    token: "access-token",
+  },
+  headers: {
+    "X-API-Version": "v2",
+    "X-Client-ID": "web-app",
+  },
+});
+
+// Request includes both Authorization and custom headers
+```
+
+<Note>
+  The `auth` option automatically sets the `Authorization` header. If you manually set an `Authorization` header, it will be overwritten by the `auth` option.
+</Note>
+
+## Advanced: Token Refresh
+
+Implement automatic token refresh with hooks:
+
+```typescript
+let accessToken = "initial-token";
+let refreshToken = "refresh-token";
+
+const refreshAccessToken = async () => {
+  const response = await fetch("/api/refresh", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken }),
+  });
+  const data = await response.json();
+  accessToken = data.accessToken;
+  return accessToken;
+};
+
+const { data } = await betterFetch("/api/protected", {
+  auth: {
+    type: "Bearer",
+    token: () => accessToken,
+  },
+  onError: async (context) => {
+    if (context.error.status === 401) {
+      // Token expired, refresh it
+      await refreshAccessToken();
+      // Retry the request with new token
+      return betterFetch(context.request.url, {
+        ...context.request,
+        auth: {
+          type: "Bearer",
+          token: accessToken,
+        },
+      });
+    }
+  },
+});
+```
+
+## Security Best Practices
+
+<Steps>
+
+### Always use HTTPS
+
+Never send authentication credentials over unencrypted connections.
+
+### Store tokens securely
+
+Use secure storage mechanisms:
+- HttpOnly cookies for web applications
+- Secure storage APIs for mobile apps
+- Never store sensitive tokens in localStorage in production
+
+### Implement token refresh
+
+Use short-lived access tokens with refresh token rotation.
+
+### Handle token expiry
+
+Implement proper error handling for 401 Unauthorized responses.
+
+</Steps>
+
+<Tip>
+  Use function-based token resolution for maximum flexibility and to avoid stale token values.
+</Tip>

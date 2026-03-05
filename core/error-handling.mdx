@@ -1,0 +1,432 @@
+---
+title: Error Handling
+description: Handle errors gracefully with Better Fetch's errors-as-values approach
+---
+
+## Overview
+
+Better Fetch takes a unique approach to error handling by returning errors as values instead of throwing exceptions by default. This makes error handling explicit, type-safe, and easier to reason about.
+
+## The Error-as-Value Pattern
+
+By default, Better Fetch returns a response object with `data` and `error` properties:
+
+```typescript
+const { data, error } = await betterFetch("https://api.example.com/users/123");
+
+if (error) {
+  // Handle error case
+  console.error(`Error ${error.status}: ${error.statusText}`);
+  return;
+}
+
+// Handle success case
+console.log("User:", data);
+```
+
+<Note>
+In the error-as-value pattern, exactly one of `data` or `error` will be non-null. When `error` is present, `data` will be `null`, and vice versa.
+</Note>
+
+## Error Object Structure
+
+When a request fails (non-2xx status code), Better Fetch returns a detailed error object:
+
+```typescript
+interface ErrorResponse {
+  data: null;
+  error: {
+    status: number;        // HTTP status code (e.g., 404, 500)
+    statusText: string;    // HTTP status text (e.g., "Not Found")
+    message?: string;      // Error message from response (if available)
+    [key: string]: any;    // Additional fields from error response
+  };
+}
+```
+
+### Example Error Response
+
+```typescript
+const { data, error } = await betterFetch("https://api.example.com/users/999");
+
+if (error) {
+  console.log(error.status);      // 404
+  console.log(error.statusText);  // "Cannot find any path matching /users/999"
+  console.log(error.message);     // Custom error message from API (if provided)
+}
+```
+
+## Handling Different Error Types
+
+### 404 Not Found
+
+```typescript
+const { data, error } = await betterFetch("https://api.example.com/users/123");
+
+if (error) {
+  if (error.status === 404) {
+    console.log("User not found");
+    // Redirect to 404 page or show not found message
+  }
+}
+```
+
+### 401 Unauthorized
+
+```typescript
+const { data, error } = await betterFetch("https://api.example.com/protected", {
+  auth: {
+    type: "Bearer",
+    token: accessToken
+  }
+});
+
+if (error) {
+  if (error.status === 401) {
+    console.log("Unauthorized - token may be expired");
+    // Refresh token or redirect to login
+  }
+}
+```
+
+### 500 Server Error
+
+```typescript
+const { data, error } = await betterFetch("https://api.example.com/data");
+
+if (error) {
+  if (error.status >= 500) {
+    console.error("Server error - please try again later");
+    // Show user-friendly error message
+  }
+}
+```
+
+### Type-Safe Error Handling
+
+You can specify the error type for better type safety:
+
+```typescript
+interface ApiError {
+  code: string;
+  message: string;
+  details?: Record<string, string[]>;
+}
+
+const { data, error } = await betterFetch<
+  User,
+  ApiError
+>("https://api.example.com/users/123");
+
+if (error) {
+  // TypeScript knows about error.code and error.message
+  console.log(`Error [${error.code}]: ${error.message}`);
+  
+  if (error.details) {
+    // Validation errors
+    Object.entries(error.details).forEach(([field, messages]) => {
+      console.log(`${field}: ${messages.join(", ")}`);
+    });
+  }
+}
+```
+
+## Throw Mode
+
+If you prefer traditional exception-based error handling, use the `throw` option:
+
+```typescript
+try {
+  const data = await betterFetch("https://api.example.com/users/123", {
+    throw: true
+  });
+  // data is directly the response body (no { data, error } wrapper)
+  console.log("User:", data);
+} catch (error) {
+  if (error instanceof BetterFetchError) {
+    console.error(`Error ${error.status}: ${error.statusText}`);
+    console.error("Details:", error.error);
+  }
+}
+```
+
+<Warning>
+In throw mode, the return type changes from `{ data, error }` to just the data type directly. Make sure to wrap your calls in try-catch blocks.
+</Warning>
+
+### BetterFetchError Class
+
+When using throw mode, errors are thrown as `BetterFetchError` instances:
+
+```typescript
+import { BetterFetchError } from "@better-fetch/fetch";
+
+class BetterFetchError extends Error {
+  constructor(
+    public status: number,      // HTTP status code
+    public statusText: string,  // HTTP status text
+    public error: any          // Parsed error response body
+  );
+}
+```
+
+### Example with BetterFetchError
+
+```typescript
+import { betterFetch, BetterFetchError } from "@better-fetch/fetch";
+
+try {
+  const data = await betterFetch("https://api.example.com/users", {
+    method: "POST",
+    body: { email: "invalid-email" },
+    throw: true
+  });
+  console.log("User created:", data);
+} catch (err) {
+  if (err instanceof BetterFetchError) {
+    console.log(`HTTP ${err.status}: ${err.statusText}`);
+    
+    // Access the parsed error response
+    if (err.error.message) {
+      console.log("Error message:", err.error.message);
+    }
+    
+    // Handle specific status codes
+    switch (err.status) {
+      case 400:
+        console.log("Validation failed:", err.error);
+        break;
+      case 401:
+        console.log("Authentication required");
+        break;
+      case 403:
+        console.log("Permission denied");
+        break;
+      default:
+        console.log("Request failed");
+    }
+  } else {
+    // Handle non-fetch errors (network issues, etc.)
+    console.error("Unexpected error:", err);
+  }
+}
+```
+
+## Global Throw Mode
+
+Set throw mode globally using `createFetch`:
+
+```typescript
+import { createFetch } from "@better-fetch/fetch";
+
+const api = createFetch({
+  baseURL: "https://api.example.com",
+  throw: true
+});
+
+// All requests will throw on error
+try {
+  const users = await api("/users");
+  const posts = await api("/posts");
+} catch (error) {
+  if (error instanceof BetterFetchError) {
+    console.error("API request failed:", error.statusText);
+  }
+}
+```
+
+## Error Response Parsing
+
+Better Fetch automatically parses error responses:
+
+### JSON Error Responses
+
+```typescript
+const { data, error } = await betterFetch("https://api.example.com/users", {
+  method: "POST",
+  body: { email: "invalid" }
+});
+
+if (error) {
+  // If server returns: { "message": "Invalid email format", "code": "VALIDATION_ERROR" }
+  console.log(error.message); // "Invalid email format"
+  console.log(error.code);    // "VALIDATION_ERROR"
+  console.log(error.status);  // 400
+}
+```
+
+### Text Error Responses
+
+```typescript
+const { data, error } = await betterFetch("https://api.example.com/action");
+
+if (error) {
+  // If server returns plain text error message
+  console.log(error); // Contains the text response
+}
+```
+
+## Error Hooks
+
+Use the `onError` hook to handle errors globally:
+
+```typescript
+const api = createFetch({
+  baseURL: "https://api.example.com",
+  onError: async ({ error, response, request, responseText }) => {
+    // Log errors to monitoring service
+    console.error("API Error:", {
+      url: request.url,
+      status: error.status,
+      statusText: error.statusText,
+      error: error
+    });
+    
+    // Handle specific errors globally
+    if (error.status === 401) {
+      // Redirect to login
+      window.location.href = "/login";
+    }
+  }
+});
+
+const { data, error } = await api("/protected-resource");
+// onError hook is called before error is returned
+```
+
+<Tip>
+The `onError` hook is called for every failed request, making it perfect for centralized error logging, monitoring, or global error handling logic.
+</Tip>
+
+## Retry on Error
+
+Automatically retry failed requests:
+
+```typescript
+const { data, error } = await betterFetch("https://api.example.com/data", {
+  retry: 3 // Retry up to 3 times
+});
+```
+
+For more advanced retry strategies, see the [Timeout and Retry](/features/timeout-retry) guide.
+
+## Best Practices
+
+<Steps>
+  <Step title="Always Check for Errors">
+    When using the default error-as-value pattern, always check the error before accessing data:
+    
+    ```typescript
+    const { data, error } = await betterFetch(url);
+    
+    if (error) {
+      // Handle error
+      return;
+    }
+    
+    // Safe to use data here
+    console.log(data);
+    ```
+  </Step>
+  
+  <Step title="Use Type Annotations">
+    Specify error types for better TypeScript support:
+    
+    ```typescript
+    interface User {
+      id: string;
+      name: string;
+    }
+    
+    interface ApiError {
+      code: string;
+      message: string;
+    }
+    
+    const { data, error } = await betterFetch<User, ApiError>(url);
+    ```
+  </Step>
+  
+  <Step title="Centralize Error Handling">
+    Use `onError` hooks or create wrapper functions for consistent error handling:
+    
+    ```typescript
+    const api = createFetch({
+      baseURL: "https://api.example.com",
+      onError: async ({ error }) => {
+        // Send to error tracking service
+        trackError(error);
+        
+        // Show user notification
+        showToast("An error occurred", "error");
+      }
+    });
+    ```
+  </Step>
+  
+  <Step title="Choose the Right Pattern">
+    Use error-as-value for most cases, but consider throw mode when:
+    - Integrating with existing try-catch based code
+    - You want errors to bubble up automatically
+    - You're wrapping requests in higher-level abstractions
+  </Step>
+</Steps>
+
+## Common Patterns
+
+### Early Return Pattern
+
+```typescript
+async function getUser(id: string) {
+  const { data, error } = await betterFetch(`/users/${id}`, {
+    baseURL: "https://api.example.com"
+  });
+  
+  if (error) {
+    console.error("Failed to fetch user:", error);
+    return null;
+  }
+  
+  return data;
+}
+```
+
+### Fallback Pattern
+
+```typescript
+const { data, error } = await betterFetch("https://api.example.com/config");
+
+const config = data ?? defaultConfig;
+```
+
+### Multiple Requests with Error Aggregation
+
+```typescript
+const [usersResult, postsResult] = await Promise.all([
+  betterFetch("https://api.example.com/users"),
+  betterFetch("https://api.example.com/posts")
+]);
+
+const errors = [
+  usersResult.error,
+  postsResult.error
+].filter(Boolean);
+
+if (errors.length > 0) {
+  console.error("Some requests failed:", errors);
+}
+
+const users = usersResult.data ?? [];
+const posts = postsResult.data ?? [];
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Type Safety" icon="shield-check" href="./type-safety">
+    Learn how to leverage TypeScript for type-safe requests
+  </Card>
+  <Card title="Retry Strategies" icon="rotate" href="/features/timeout-retry">
+    Configure advanced retry logic for failed requests
+  </Card>
+</CardGroup>

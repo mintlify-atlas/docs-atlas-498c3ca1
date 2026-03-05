@@ -1,0 +1,444 @@
+---
+title: Dynamic Parameters
+description: Build URLs with path parameters and query strings
+---
+
+Better Fetch provides powerful URL building capabilities with type-safe path parameters and query strings.
+
+## Path Parameters (params)
+
+Replace path segments with dynamic values using the `params` option.
+
+### Object-based Parameters
+
+Use named parameters in your URL path:
+
+```typescript
+import { betterFetch } from "@better-fetch/fetch";
+
+const { data } = await betterFetch("/api/user/:id", {
+  params: {
+    id: 123,
+  },
+});
+
+// Requests: /api/user/123
+```
+
+### Multiple Path Parameters
+
+```typescript
+const { data } = await betterFetch("/api/user/:userId/post/:postId", {
+  params: {
+    userId: 456,
+    postId: 789,
+  },
+});
+
+// Requests: /api/user/456/post/789
+```
+
+### Array-based Parameters
+
+Use positional parameters with an array:
+
+```typescript
+const { data } = await betterFetch("/api/user/:id/post/:postId", {
+  params: [456, 789],
+});
+
+// Requests: /api/user/456/post/789
+```
+
+Parameters are matched in order of appearance in the URL.
+
+<Note>
+  Path parameters are automatically URL-encoded for safety.
+</Note>
+
+## Query Parameters (query)
+
+Add query string parameters to your request:
+
+```typescript
+const { data } = await betterFetch("/api/search", {
+  query: {
+    term: "typescript",
+    page: 1,
+    limit: 20,
+  },
+});
+
+// Requests: /api/search?term=typescript&page=1&limit=20
+```
+
+### String Values
+
+```typescript
+await betterFetch("/api/users", {
+  query: {
+    name: "John Doe",
+    role: "admin",
+  },
+});
+
+// Requests: /api/users?name=John%20Doe&role=admin
+```
+
+### Array Values
+
+Array values are automatically expanded:
+
+```typescript
+await betterFetch("/api/products", {
+  query: {
+    category: ["electronics", "computers", "laptops"],
+    minPrice: 100,
+  },
+});
+
+// Requests: /api/products?category=electronics&category=computers&category=laptops&minPrice=100
+```
+
+### Object Values
+
+Objects are JSON-stringified:
+
+```typescript
+await betterFetch("/api/search", {
+  query: {
+    filter: {
+      status: "active",
+      verified: true,
+    },
+  },
+});
+
+// Requests: /api/search?filter=%7B%22status%22%3A%22active%22%2C%22verified%22%3Atrue%7D
+```
+
+### Null and Undefined Values
+
+Null and undefined values are automatically skipped:
+
+```typescript
+await betterFetch("/api/users", {
+  query: {
+    name: "John",
+    age: null,        // Skipped
+    email: undefined, // Skipped
+  },
+});
+
+// Requests: /api/users?name=John
+```
+
+<Tip>
+  Use `null` or `undefined` to conditionally include query parameters.
+</Tip>
+
+## Combining Parameters and Query
+
+Use both path parameters and query strings together:
+
+```typescript
+const { data } = await betterFetch("/api/user/:id/posts", {
+  params: {
+    id: 123,
+  },
+  query: {
+    page: 1,
+    limit: 10,
+    sort: "date",
+  },
+});
+
+// Requests: /api/user/123/posts?page=1&limit=10&sort=date
+```
+
+## URL Construction
+
+Better Fetch follows these rules when constructing URLs:
+
+### Base URL Handling
+
+```typescript
+import { createFetch } from "@better-fetch/fetch";
+
+const $fetch = createFetch({
+  baseURL: "https://api.example.com",
+});
+
+await $fetch("/user/:id", {
+  params: { id: 123 },
+  query: { include: "posts" },
+});
+
+// Requests: https://api.example.com/user/123?include=posts
+```
+
+### Existing Query Strings
+
+Query parameters from the URL are merged with the `query` option:
+
+```typescript
+await betterFetch("/api/search?term=typescript", {
+  query: {
+    page: 2,
+    limit: 20,
+  },
+});
+
+// Requests: /api/search?term=typescript&page=2&limit=20
+```
+
+If the same key exists in both, the `query` option value takes precedence:
+
+```typescript
+await betterFetch("/api/search?page=1", {
+  query: {
+    page: 2,  // Overrides the URL value
+  },
+});
+
+// Requests: /api/search?page=2
+```
+
+### URL Encoding
+
+All query parameters and path segments are automatically URL-encoded:
+
+```typescript
+await betterFetch("/api/user/:name", {
+  params: {
+    name: "John Doe",
+  },
+  query: {
+    search: "hello world",
+    filter: "tag:important",
+  },
+});
+
+// Requests: /api/user/John%20Doe?search=hello%20world&filter=tag%3Aimportant
+```
+
+<Note>
+  Spaces in query parameters are encoded as `%20`, not `+`.
+</Note>
+
+## Dynamic Parameter Patterns
+
+### Conditional Parameters
+
+```typescript
+const includeDeleted = false;
+
+await betterFetch("/api/posts", {
+  query: {
+    status: "published",
+    ...(includeDeleted && { deleted: true }),
+  },
+});
+
+// Requests: /api/posts?status=published
+```
+
+### Pagination
+
+```typescript
+const page = 3;
+const pageSize = 25;
+
+const { data } = await betterFetch("/api/posts", {
+  query: {
+    page,
+    limit: pageSize,
+    offset: (page - 1) * pageSize,
+  },
+});
+
+// Requests: /api/posts?page=3&limit=25&offset=50
+```
+
+### Search Filters
+
+```typescript
+const filters = {
+  category: "electronics",
+  minPrice: 100,
+  maxPrice: 1000,
+  inStock: true,
+};
+
+const { data } = await betterFetch("/api/products", {
+  query: filters,
+});
+
+// Requests: /api/products?category=electronics&minPrice=100&maxPrice=1000&inStock=true
+```
+
+## Using with createFetch
+
+Define base parameters for all requests:
+
+```typescript
+import { createFetch } from "@better-fetch/fetch";
+
+const $fetch = createFetch({
+  baseURL: "https://api.example.com/v2",
+  query: {
+    apiKey: "your-api-key",
+    format: "json",
+  },
+});
+
+// All requests include the base query parameters
+const { data } = await $fetch("/users", {
+  query: {
+    page: 1,  // Merged with base query
+  },
+});
+
+// Requests: https://api.example.com/v2/users?apiKey=your-api-key&format=json&page=1
+```
+
+## Type Safety
+
+Better Fetch provides type inference for parameters:
+
+```typescript
+import { createFetch } from "@better-fetch/fetch";
+import { z } from "zod";
+
+const schema = {
+  "/user/:id": {
+    params: z.object({
+      id: z.number(),
+    }),
+    query: z.object({
+      include: z.string().optional(),
+    }),
+  },
+};
+
+const $fetch = createFetch({
+  schema,
+});
+
+// TypeScript will enforce correct params and query types
+const { data } = await $fetch("/user/:id", {
+  params: {
+    id: 123,        // Type-safe: must be a number
+  },
+  query: {
+    include: "posts", // Type-safe: must be a string
+  },
+});
+```
+
+## Advanced URL Building
+
+### Complex Path Patterns
+
+```typescript
+// REST API with version
+await betterFetch("/api/v:version/user/:userId/post/:postId", {
+  params: {
+    version: 2,
+    userId: 123,
+    postId: 456,
+  },
+});
+
+// Requests: /api/v2/user/123/post/456
+```
+
+### Special Characters in Parameters
+
+```typescript
+await betterFetch("/api/search/:query", {
+  params: {
+    query: "hello@world.com",
+  },
+});
+
+// Requests: /api/search/hello%40world.com
+```
+
+### Dynamic Host
+
+```typescript
+const tenant = "acme";
+
+const { data } = await betterFetch("/api/data", {
+  baseURL: `https://${tenant}.example.com`,
+  params: { id: 123 },
+});
+
+// Requests: https://acme.example.com/api/data
+```
+
+## Real-World Examples
+
+### GitHub API
+
+```typescript
+const { data } = await betterFetch(
+  "https://api.github.com/repos/:owner/:repo/issues",
+  {
+    params: {
+      owner: "facebook",
+      repo: "react",
+    },
+    query: {
+      state: "open",
+      labels: ["bug", "help wanted"],
+      per_page: 50,
+      page: 1,
+    },
+  }
+);
+
+// Requests: https://api.github.com/repos/facebook/react/issues?state=open&labels=bug&labels=help%20wanted&per_page=50&page=1
+```
+
+### E-commerce API
+
+```typescript
+const { data } = await betterFetch("/api/products/:category/:subcategory", {
+  params: {
+    category: "electronics",
+    subcategory: "laptops",
+  },
+  query: {
+    brand: ["Apple", "Dell", "Lenovo"],
+    minPrice: 500,
+    maxPrice: 2000,
+    inStock: true,
+    sortBy: "price",
+    order: "asc",
+    page: 1,
+    limit: 24,
+  },
+});
+```
+
+### Social Media API
+
+```typescript
+const { data } = await betterFetch("/api/user/:username/posts/:postId/comments", {
+  params: {
+    username: "johndoe",
+    postId: "abc123",
+  },
+  query: {
+    sort: "recent",
+    limit: 20,
+    includeReplies: true,
+  },
+});
+```
+
+<Tip>
+  Combine `params` and `query` to build clean, readable API URLs with full type safety.
+</Tip>
