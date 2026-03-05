@@ -231,7 +231,7 @@ const plugin = {
 Pass plugins directly to `betterFetch`:
 
 ```typescript
-import { betterFetch } from "better-fetch";
+import { betterFetch } from "@better-fetch/fetch";
 
 const { data, error } = await betterFetch("https://api.example.com/users", {
   plugins: [loggingPlugin, authPlugin],
@@ -243,7 +243,7 @@ const { data, error } = await betterFetch("https://api.example.com/users", {
 Configure plugins at the instance level:
 
 ```typescript
-import { createFetch } from "better-fetch";
+import { createFetch } from "@better-fetch/fetch";
 
 const $fetch = createFetch({
   baseURL: "https://api.example.com",
@@ -387,7 +387,7 @@ Plugins can define their own schemas that integrate with the type system:
 
 ```typescript
 import { z } from "zod";
-import { createSchema } from "better-fetch";
+import { createSchema } from "@better-fetch/fetch";
 
 const plugin = {
   id: "my-api",

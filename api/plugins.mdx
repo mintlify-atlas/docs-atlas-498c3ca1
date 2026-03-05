@@ -398,7 +398,7 @@ This function is used internally by Better Fetch to initialize plugins and colle
 ### Logging Plugin
 
 ```typescript
-import type { BetterFetchPlugin } from "better-fetch"
+import type { BetterFetchPlugin } from "@better-fetch/fetch"
 
 const loggingPlugin: BetterFetchPlugin = {
   id: "logging-plugin",
@@ -560,7 +560,7 @@ const errorTrackingPlugin: BetterFetchPlugin<ErrorTrackingOptions> = {
 ### With betterFetch
 
 ```typescript
-import { betterFetch } from "better-fetch"
+import { betterFetch } from "@better-fetch/fetch"
 import { loggingPlugin } from "./plugins"
 
 const { data, error } = await betterFetch("/api/users", {
@@ -571,7 +571,7 @@ const { data, error } = await betterFetch("/api/users", {
 ### With createFetch
 
 ```typescript
-import { createFetch } from "better-fetch"
+import { createFetch } from "@better-fetch/fetch"
 import { loggingPlugin, cachePlugin } from "./plugins"
 
 const api = createFetch({

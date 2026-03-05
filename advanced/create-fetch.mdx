@@ -10,7 +10,7 @@ description: "Create custom fetch instances with pre-configured options, schemas
 ## Basic Usage
 
 ```typescript
-import { createFetch } from "better-fetch";
+import { createFetch } from "@better-fetch/fetch";
 
 const $fetch = createFetch({
   baseURL: "https://api.example.com",
@@ -190,7 +190,7 @@ const $fetch = createFetch({
 Define type-safe API schemas at the instance level:
 
 ```typescript
-import { createFetch, createSchema } from "better-fetch";
+import { createFetch, createSchema } from "@better-fetch/fetch";
 import { z } from "zod";
 
 const schema = {
@@ -292,7 +292,7 @@ const result = await $fetch("/users");
 The return type of `createFetch` is `BetterFetch<Option>`, which provides full type inference based on your configuration:
 
 ```typescript
-import type { BetterFetch, CreateFetchOption } from "better-fetch";
+import type { BetterFetch, CreateFetchOption } from "@better-fetch/fetch";
 
 type MyFetch = BetterFetch<{
   baseURL: "https://api.example.com";
@@ -315,7 +315,7 @@ The `BetterFetch` type:
 Create a dedicated API client for your backend:
 
 ```typescript
-import { createFetch, createSchema } from "better-fetch";
+import { createFetch, createSchema } from "@better-fetch/fetch";
 
 const api = createFetch({
   baseURL: process.env.API_URL,
@@ -368,7 +368,7 @@ export const api = process.env.NODE_ENV === "production" ? prodApi : devApi;
 Create a fully type-safe API client:
 
 ```typescript
-import { createFetch, createSchema } from "better-fetch";
+import { createFetch, createSchema } from "@better-fetch/fetch";
 import { apiSchema } from "./schema";
 
 const $fetch = createFetch({

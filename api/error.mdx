@@ -121,7 +121,7 @@ class BetterFetchError extends Error {
 Errors are only thrown when `throw: true` is set:
 
 ```typescript
-import { betterFetch, BetterFetchError } from "better-fetch"
+import { betterFetch, BetterFetchError } from "@better-fetch/fetch"
 
 try {
   const data = await betterFetch("/api/users", {
@@ -157,7 +157,7 @@ if (error) {
 ### Basic Error Handling
 
 ```typescript
-import { betterFetch, BetterFetchError } from "better-fetch"
+import { betterFetch, BetterFetchError } from "@better-fetch/fetch"
 
 try {
   const user = await betterFetch("/api/users/999", {
@@ -248,7 +248,7 @@ try {
 ### With Error Logging Service
 
 ```typescript
-import { betterFetch, BetterFetchError } from "better-fetch"
+import { betterFetch, BetterFetchError } from "@better-fetch/fetch"
 import * as Sentry from "@sentry/browser"
 
 try {
@@ -329,7 +329,7 @@ try {
 
 ```typescript
 import { Component, ReactNode } from "react"
-import { BetterFetchError } from "better-fetch"
+import { BetterFetchError } from "@better-fetch/fetch"
 
 class ErrorBoundary extends Component<
   { children: ReactNode },

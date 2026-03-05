@@ -119,7 +119,7 @@ export const createFetch: <Option extends CreateFetchOption>(
       API schema definition for type-safe routes and automatic validation.
       
       ```typescript
-      import { createSchema } from "better-fetch"
+      import { createSchema } from "@better-fetch/fetch"
       import { z } from "zod"
       
       const schema = createSchema({
@@ -188,7 +188,7 @@ export const createFetch: <Option extends CreateFetchOption>(
 ### Basic Configuration
 
 ```typescript
-import { createFetch } from "better-fetch"
+import { createFetch } from "@better-fetch/fetch"
 
 const api = createFetch({
   baseURL: "https://api.example.com",
@@ -224,7 +224,7 @@ const { data, error } = await api("/protected")
 ### With Schema Validation
 
 ```typescript
-import { createFetch, createSchema } from "better-fetch"
+import { createFetch, createSchema } from "@better-fetch/fetch"
 import { z } from "zod"
 
 const userSchema = z.object({
@@ -324,7 +324,7 @@ const api = createFetch({
 ### With Plugins
 
 ```typescript
-import { createFetch } from "better-fetch"
+import { createFetch } from "@better-fetch/fetch"
 import { myCustomPlugin } from "./plugins"
 
 const api = createFetch({

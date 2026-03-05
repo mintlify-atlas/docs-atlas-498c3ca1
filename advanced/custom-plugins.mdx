@@ -12,7 +12,7 @@ Custom plugins allow you to extend Better Fetch with your own functionality. Whe
 A plugin is an object that implements the `BetterFetchPlugin` interface:
 
 ```typescript
-import type { BetterFetchPlugin } from "better-fetch";
+import type { BetterFetchPlugin } from "@better-fetch/fetch";
 
 const myPlugin: BetterFetchPlugin = {
   id: "my-plugin",           // Unique identifier
@@ -312,8 +312,8 @@ Plugins can define their own schemas that integrate with the type system:
 
 ```typescript
 import { z } from "zod";
-import { createSchema } from "better-fetch";
-import type { BetterFetchPlugin } from "better-fetch";
+import { createSchema } from "@better-fetch/fetch";
+import type { BetterFetchPlugin } from "@better-fetch/fetch";
 
 const apiPlugin: BetterFetchPlugin = {
   id: "external-api",
@@ -755,7 +755,7 @@ Test your plugins thoroughly:
 
 ```typescript
 import { describe, it, expect } from "vitest";
-import { createFetch } from "better-fetch";
+import { createFetch } from "@better-fetch/fetch";
 import { myPlugin } from "./my-plugin";
 
 describe("My Plugin", () => {
